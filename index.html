@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Investor Relations Analysis — RAG from scratch</title>
-<meta name="description" content="A RAG system built from scratch (no frameworks) that reads Investor Relations reports from companies and REITs and answers questions citing the exact page and section.">
+<title>Simple RAG PDF — RAG from scratch</title>
+<meta name="description" content="A RAG system built from scratch (no frameworks) that reads any PDF document and answers questions citing the exact page and section.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -177,6 +177,25 @@ nav {
 .analogy p { margin: 0; color: var(--text-soft); }
 .analogy strong { color: var(--text); }
 
+.rag-letters {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  max-width: 900px; margin: 0 auto 44px;
+}
+.rag-letter {
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 26px 24px; text-align: center;
+  transition: transform var(--transition), border-color var(--transition);
+}
+.rag-letter:hover { transform: translateY(-2px); border-color: var(--accent); }
+.rag-letter .letter {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-size: 1.5rem; font-weight: 800; margin-bottom: 12px;
+}
+.rag-letter h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; }
+.rag-letter p { color: var(--text-soft); font-size: 0.92rem; margin: 0; }
+
 .pipeline { max-width: 760px; margin: 0 auto; }
 .pipe-step {
   display: flex; gap: 18px; align-items: flex-start;
@@ -240,7 +259,7 @@ footer {
 
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
-  .cards-grid, .steps { grid-template-columns: 1fr; }
+  .cards-grid, .steps, .rag-letters { grid-template-columns: 1fr; }
   .tech-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 640px) {
@@ -272,7 +291,7 @@ footer {
     </ul>
     <div class="nav-actions">
       <button class="lang-toggle" id="langToggle">PT</button>
-      <a class="nav-cta" href="https://github.com/rpaiva-dev/investor_relations_analysis" target="_blank" rel="noopener" data-i18n="nav.cta">Repository</a>
+      <a class="nav-cta" href="https://github.com/rpaiva-dev/simple_rag_pdf" target="_blank" rel="noopener" data-i18n="nav.cta">Repository</a>
     </div>
   </nav>
 </header>
@@ -280,8 +299,8 @@ footer {
 <!-- ================= HERO ================= -->
 <section class="hero container" id="top">
   <p class="kicker" data-i18n="hero.kicker">RAG built from scratch · no frameworks</p>
-  <h1 data-i18n="hero.title">Investor Relations Analysis</h1>
-  <p class="lead" data-i18n="hero.lead">Upload an Investor Relations report (companies or REITs), ask questions in plain language, and get answers that cite the exact page and section — never a hallucinated number.</p>
+  <h1 data-i18n="hero.title">Simple RAG PDF</h1>
+  <p class="lead" data-i18n="hero.lead">Upload any PDF document, ask questions in plain language, and get answers that cite the exact page and section.</p>
   <div class="hero-actions">
     <a class="btn btn-primary" href="#run" data-i18n="hero.btnRun">Get started</a>
     <a class="btn btn-outline" href="#rag" data-i18n="hero.btnRag">How RAG works</a>
@@ -292,22 +311,22 @@ footer {
 <section class="section section-alt" id="about">
   <div class="container">
     <h2 class="section-title reveal" data-i18n="about.title">What this project does</h2>
-    <p class="section-sub reveal" data-i18n="about.sub">Quarterly IR reports are long PDFs packed with tables. Finding one specific number means flipping through dozens of pages — this project turns that into a single question.</p>
+    <p class="section-sub reveal" data-i18n="about.sub">Long PDFs — reports, contracts, manuals, papers — bury the information you need across dozens of pages. This project turns finding it into a single question.</p>
     <div class="cards-grid">
       <div class="project-card reveal">
         <div class="icon">📎</div>
-        <h3 data-i18n="about.card1.title">Attach a report</h3>
-        <p data-i18n="about.card1.text">Upload the PDF of an earnings release or a REIT management report, or paste the link of the IR page — the system finds and downloads the report by itself.</p>
+        <h3 data-i18n="about.card1.title">Attach a PDF</h3>
+        <p data-i18n="about.card1.text">Upload any PDF document, or paste the link of a page that contains it — the system finds and downloads the PDF by itself.</p>
       </div>
       <div class="project-card reveal">
         <div class="icon">💬</div>
         <h3 data-i18n="about.card2.title">Ask in plain language</h3>
-        <p data-i18n="about.card2.text">"What was the net income this quarter?", "How much did the fund distribute per share?", "What is the current vacancy rate?" — no need to know where the answer lives.</p>
+        <p data-i18n="about.card2.text">"What is the total value of the contract?", "What does chapter 3 conclude?", "What are the system requirements?" — no need to know where the answer lives.</p>
       </div>
       <div class="project-card reveal">
         <div class="icon">📌</div>
         <h3 data-i18n="about.card3.title">Verify the source</h3>
-        <p data-i18n="about.card3.text">Every answer cites the document, page and section it came from. If the information is not in the report, the system says so — it never invents a financial figure.</p>
+        <p data-i18n="about.card3.text">Every answer cites the document, page and section it came from. If the information is not in the document, the system says so — it never invents a fact or a number.</p>
       </div>
     </div>
   </div>
@@ -316,8 +335,25 @@ footer {
 <!-- ================= WHAT IS RAG ================= -->
 <section class="section" id="rag">
   <div class="container">
-    <h2 class="section-title reveal" data-i18n="rag.title">What is RAG? (in plain terms)</h2>
-    <p class="section-sub reveal" data-i18n="rag.sub">RAG stands for Retrieval-Augmented Generation — a technique that makes an AI answer based on your documents, not on what it memorized during training.</p>
+    <h2 class="section-title reveal" data-i18n="rag.title">What is RAG?</h2>
+    <p class="section-sub reveal" data-i18n="rag.sub">RAG stands for Retrieval-Augmented Generation — a technique that makes an AI answer based on your documents, not on what it memorized during training. Letter by letter:</p>
+    <div class="rag-letters">
+      <div class="rag-letter reveal">
+        <span class="letter">R</span>
+        <h3 data-i18n="rag.r.title">Retrieval</h3>
+        <p data-i18n="rag.r.text">The act of searching and fetching. Before answering anything, the system retrieves from your documents the passages most related to the question — like a librarian pulling the right pages off the shelf.</p>
+      </div>
+      <div class="rag-letter reveal">
+        <span class="letter">A</span>
+        <h3 data-i18n="rag.a.title">Augmented</h3>
+        <p data-i18n="rag.a.text">Enriched, reinforced. The AI's prompt is augmented with those retrieved passages: instead of relying on memory alone, the model receives the relevant excerpts attached to the question.</p>
+      </div>
+      <div class="rag-letter reveal">
+        <span class="letter">G</span>
+        <h3 data-i18n="rag.g.title">Generation</h3>
+        <p data-i18n="rag.g.text">The writing of the answer. The language model generates the final text using only the passages it received, under strict rules to quote the source of every fact.</p>
+      </div>
+    </div>
     <div class="analogy reveal">
       <p data-i18n="rag.analogy"><strong>The open-book exam analogy:</strong> a regular AI chat is like a student taking a closed-book exam — when it doesn't remember, it guesses (confidently). RAG turns it into an open-book exam: before answering, the system searches your documents for the relevant passages, hands them to the AI and orders: <em>"answer using only this, and say where it came from."</em></p>
     </div>
@@ -351,7 +387,7 @@ footer {
         <div class="num">1</div>
         <div>
           <h3 data-i18n="arch.s1.title">Extraction — <code>src/extract.py</code></h3>
-          <p data-i18n="arch.s1.text">Reads the PDF with pdfplumber, separating running text from tables. A financial table mixed into text scrambles labels and values — keeping them apart is what prevents confusing "net income" with "vacancy". Links to IR pages are resolved and downloaded automatically.</p>
+          <p data-i18n="arch.s1.text">Reads the PDF with pdfplumber, separating running text from tables. A financial table mixed into text scrambles labels and values — keeping them apart is what prevents pairing a label with the wrong value. Links to pages containing a PDF are resolved and downloaded automatically.</p>
         </div>
       </div>
       <div class="pipe-arrow">▼</div>
@@ -443,8 +479,8 @@ footer {
     <p class="section-sub reveal" data-i18n="run.sub">Requirements: Python 3.10+ and an OpenAI API key.</p>
 
     <h3 class="reveal" data-i18n="run.step1">1. Clone the repository and create a virtual environment</h3>
-    <pre class="reveal"><code>git clone https://github.com/rpaiva-dev/investor_relations_analysis.git
-cd investor_relations_analysis
+    <pre class="reveal"><code>git clone https://github.com/rpaiva-dev/simple_rag_pdf.git
+cd simple_rag_pdf
 python -m venv .venv
 
 # Windows:
@@ -470,12 +506,12 @@ cp .env.example .env        # Linux/Mac</code></pre>
     <h3 class="reveal" data-i18n="use.title">How to use it</h3>
     <ol class="usage reveal">
       <li data-i18n="use.li1"><strong>Create a chat</strong> (or use the default one). Each chat holds its own documents and history — rename or delete it from the "⋯" menu.</li>
-      <li data-i18n="use.li2"><strong>Attach the report PDF</strong> (.pdf only) in the uploader, or paste the IR page link in the chat. The question field only unlocks after a document is processed, and the chat is renamed automatically after the file.</li>
-      <li data-i18n="use.li3"><strong>Ask in natural language</strong> — e.g. "What was the net income this quarter?", "How much did the fund distribute per share this month?", "What is the current vacancy rate?"</li>
+      <li data-i18n="use.li2"><strong>Attach the PDF</strong> (.pdf only) in the uploader, or paste a link in the chat. The question field only unlocks after a document is processed, and the chat is renamed automatically after the file.</li>
+      <li data-i18n="use.li3"><strong>Ask in natural language</strong> — e.g. "What is the total value of the contract?", "What does chapter 3 conclude?", "What are the system requirements?"</li>
       <li data-i18n="use.li4"><strong>Check the source</strong>: under each answer, the "📌 Sources used" panel shows the document, page and section the information was extracted from — you can open the PDF and verify it.</li>
-      <li data-i18n="use.li5"><strong>Compare quarters</strong>: attach more than one PDF to the same chat and ask comparative questions ("did the distribution grow versus last quarter?").</li>
+      <li data-i18n="use.li5"><strong>Compare documents</strong>: attach more than one PDF to the same chat and ask comparative questions ("what changed between the two versions?").</li>
     </ol>
-    <div class="note reveal" data-i18n="use.note">💡 If you ask something that is not in the document (today's stock price, recent news), the system will answer that the information is not in the provided documents — that is the correct behavior, not a bug.</div>
+    <div class="note reveal" data-i18n="use.note">💡 If you ask something that is not in the document (an external fact, recent news), the system will answer that the information is not in the provided documents — that is the correct behavior, not a bug.</div>
   </div>
 </section>
 
@@ -485,14 +521,14 @@ cp .env.example .env        # Linux/Mac</code></pre>
     <h2 class="section-title reveal" data-i18n="contact.title">Explore the project</h2>
     <p class="section-sub reveal" data-i18n="contact.sub">The full source code is open — every module is small enough to read in one sitting.</p>
     <div class="contact-links reveal">
-      <a href="https://github.com/rpaiva-dev/investor_relations_analysis" target="_blank" rel="noopener" data-i18n="contact.repo">GitHub repository</a>
+      <a href="https://github.com/rpaiva-dev/simple_rag_pdf" target="_blank" rel="noopener" data-i18n="contact.repo">GitHub repository</a>
       <a href="https://github.com/rpaiva-dev" target="_blank" rel="noopener" data-i18n="contact.author">Author</a>
     </div>
   </div>
 </section>
 
 <footer>
-  <p data-i18n="footer.text">Investor Relations Analysis — portfolio project · RAG built from scratch in Python</p>
+  <p data-i18n="footer.text">Simple RAG PDF — portfolio project · RAG built from scratch in Python</p>
 </footer>
 
 <script>
@@ -507,20 +543,26 @@ const I18N = {
     "nav.run": "Get started",
     "nav.cta": "Repository",
     "hero.kicker": "RAG built from scratch · no frameworks",
-    "hero.title": "Investor Relations Analysis",
-    "hero.lead": "Upload an Investor Relations report (companies or REITs), ask questions in plain language, and get answers that cite the exact page and section — never a hallucinated number.",
+    "hero.title": "Simple RAG PDF",
+    "hero.lead": "Upload any PDF document, ask questions in plain language, and get answers that cite the exact page and section.",
     "hero.btnRun": "Get started",
     "hero.btnRag": "How RAG works",
     "about.title": "What this project does",
-    "about.sub": "Quarterly IR reports are long PDFs packed with tables. Finding one specific number means flipping through dozens of pages — this project turns that into a single question.",
-    "about.card1.title": "Attach a report",
-    "about.card1.text": "Upload the PDF of an earnings release or a REIT management report, or paste the link of the IR page — the system finds and downloads the report by itself.",
+    "about.sub": "Long PDFs — reports, contracts, manuals, papers — bury the information you need across dozens of pages. This project turns finding it into a single question.",
+    "about.card1.title": "Attach a PDF",
+    "about.card1.text": "Upload any PDF document, or paste the link of a page that contains it — the system finds and downloads the PDF by itself.",
     "about.card2.title": "Ask in plain language",
-    "about.card2.text": "“What was the net income this quarter?”, “How much did the fund distribute per share?”, “What is the current vacancy rate?” — no need to know where the answer lives.",
+    "about.card2.text": "“What is the total value of the contract?”, “What does chapter 3 conclude?”, “What are the system requirements?” — no need to know where the answer lives.",
     "about.card3.title": "Verify the source",
-    "about.card3.text": "Every answer cites the document, page and section it came from. If the information is not in the report, the system says so — it never invents a financial figure.",
-    "rag.title": "What is RAG? (in plain terms)",
-    "rag.sub": "RAG stands for Retrieval-Augmented Generation — a technique that makes an AI answer based on your documents, not on what it memorized during training.",
+    "about.card3.text": "Every answer cites the document, page and section it came from. If the information is not in the document, the system says so — it never invents a fact or a number.",
+    "rag.title": "What is RAG?",
+    "rag.sub": "RAG stands for Retrieval-Augmented Generation — a technique that makes an AI answer based on your documents, not on what it memorized during training. Letter by letter:",
+    "rag.r.title": "Retrieval",
+    "rag.r.text": "The act of searching and fetching. Before answering anything, the system retrieves from your documents the passages most related to the question — like a librarian pulling the right pages off the shelf.",
+    "rag.a.title": "Augmented",
+    "rag.a.text": "Enriched, reinforced. The AI's prompt is augmented with those retrieved passages: instead of relying on memory alone, the model receives the relevant excerpts attached to the question.",
+    "rag.g.title": "Generation",
+    "rag.g.text": "The writing of the answer. The language model generates the final text using only the passages it received, under strict rules to quote the source of every fact.",
     "rag.analogy": "<strong>The open-book exam analogy:</strong> a regular AI chat is like a student taking a closed-book exam — when it doesn't remember, it guesses (confidently). RAG turns it into an open-book exam: before answering, the system searches your documents for the relevant passages, hands them to the AI and orders: <em>“answer using only this, and say where it came from.”</em>",
     "rag.step1.title": "1 · Indexing",
     "rag.step1.text": "The document is split into small pieces (“chunks”), and each piece is converted into a list of numbers (an embedding) that captures its meaning. Similar meanings become similar numbers.",
@@ -531,7 +573,7 @@ const I18N = {
     "arch.title": "Architecture: from PDF to answer",
     "arch.sub": "Every step of the pipeline is a small, readable Python module — built by hand precisely to expose what RAG frameworks hide under the hood.",
     "arch.s1.title": "Extraction — <code>src/extract.py</code>",
-    "arch.s1.text": "Reads the PDF with pdfplumber, separating running text from tables. A financial table mixed into text scrambles labels and values — keeping them apart is what prevents confusing “net income” with “vacancy”. Links to IR pages are resolved and downloaded automatically.",
+    "arch.s1.text": "Reads the PDF with pdfplumber, separating running text from tables. A financial table mixed into text scrambles labels and values — keeping them apart is what prevents pairing a label with the wrong value. Links to pages containing a PDF are resolved and downloaded automatically.",
     "arch.s2.title": "Chunking — <code>src/chunking.py</code>",
     "arch.s2.text": "Splits the text into ~400-token pieces, cutting by section first (“Financial Results”, “Dividend Distribution”...), then by paragraph, with overlap between neighbors. Tables are never split. Each chunk carries its metadata — document, page, section — which is where source citation comes from.",
     "arch.s3.title": "Embeddings — <code>src/embeddings.py</code>",
@@ -567,16 +609,16 @@ const I18N = {
     "run.step4note": "The browser opens automatically at <code>http://localhost:8501</code>.",
     "use.title": "How to use it",
     "use.li1": "<strong>Create a chat</strong> (or use the default one). Each chat holds its own documents and history — rename or delete it from the “⋯” menu.",
-    "use.li2": "<strong>Attach the report PDF</strong> (.pdf only) in the uploader, or paste the IR page link in the chat. The question field only unlocks after a document is processed, and the chat is renamed automatically after the file.",
-    "use.li3": "<strong>Ask in natural language</strong> — e.g. “What was the net income this quarter?”, “How much did the fund distribute per share this month?”, “What is the current vacancy rate?”",
+    "use.li2": "<strong>Attach the PDF</strong> (.pdf only) in the uploader, or paste a link in the chat. The question field only unlocks after a document is processed, and the chat is renamed automatically after the file.",
+    "use.li3": "<strong>Ask in natural language</strong> — e.g. “What is the total value of the contract?”, “What does chapter 3 conclude?”, “What are the system requirements?”",
     "use.li4": "<strong>Check the source</strong>: under each answer, the “📌 Sources used” panel shows the document, page and section the information was extracted from — you can open the PDF and verify it.",
-    "use.li5": "<strong>Compare quarters</strong>: attach more than one PDF to the same chat and ask comparative questions (“did the distribution grow versus last quarter?”).",
-    "use.note": "💡 If you ask something that is not in the document (today's stock price, recent news), the system will answer that the information is not in the provided documents — that is the correct behavior, not a bug.",
+    "use.li5": "<strong>Compare documents</strong>: attach more than one PDF to the same chat and ask comparative questions (“what changed between the two versions?”).",
+    "use.note": "💡 If you ask something that is not in the document (an external fact, recent news), the system will answer that the information is not in the provided documents — that is the correct behavior, not a bug.",
     "contact.title": "Explore the project",
     "contact.sub": "The full source code is open — every module is small enough to read in one sitting.",
     "contact.repo": "GitHub repository",
     "contact.author": "Author",
-    "footer.text": "Investor Relations Analysis — portfolio project · RAG built from scratch in Python"
+    "footer.text": "Simple RAG PDF — portfolio project · RAG built from scratch in Python"
   },
   pt: {
     "nav.about": "Sobre",
@@ -585,20 +627,26 @@ const I18N = {
     "nav.run": "Como rodar",
     "nav.cta": "Repositório",
     "hero.kicker": "RAG construído do zero · sem frameworks",
-    "hero.title": "Investor Relations Analysis",
-    "hero.lead": "Envie um relatório de Relação com Investidores (empresas ou FIIs), pergunte em linguagem natural e receba respostas que citam a página e a seção exatas — nunca um número alucinado.",
+    "hero.title": "Simple RAG PDF",
+    "hero.lead": "Envie qualquer documento PDF, pergunte em linguagem natural e receba respostas que citam a página e a seção exatas.",
     "hero.btnRun": "Como rodar",
     "hero.btnRag": "Como o RAG funciona",
     "about.title": "O que este projeto faz",
-    "about.sub": "Relatórios trimestrais de RI são PDFs longos e cheios de tabelas. Achar um número específico significa folhear dezenas de páginas — este projeto transforma isso em uma única pergunta.",
-    "about.card1.title": "Anexe um relatório",
-    "about.card1.text": "Envie o PDF de um release de resultados ou relatório gerencial de FII, ou cole o link da página de RI — o sistema localiza e baixa o relatório sozinho.",
+    "about.sub": "PDFs longos — relatórios, contratos, manuais, artigos — escondem a informação que você precisa em dezenas de páginas. Este projeto transforma encontrá-la em uma única pergunta.",
+    "about.card1.title": "Anexe um PDF",
+    "about.card1.text": "Envie qualquer documento PDF, ou cole o link de uma página que o contenha — o sistema localiza e baixa o PDF sozinho.",
     "about.card2.title": "Pergunte em linguagem natural",
-    "about.card2.text": "“Qual foi o lucro líquido do trimestre?”, “Quanto o fundo distribuiu por cota?”, “Qual a vacância atual?” — sem precisar saber onde a resposta está.",
+    "about.card2.text": "“Qual o valor total do contrato?”, “O que o capítulo 3 conclui?”, “Quais os requisitos do sistema?” — sem precisar saber onde a resposta está.",
     "about.card3.title": "Confira a fonte",
-    "about.card3.text": "Toda resposta cita o documento, a página e a seção de origem. Se a informação não estiver no relatório, o sistema diz isso — ele nunca inventa um número financeiro.",
-    "rag.title": "O que é RAG? (para leigos)",
-    "rag.sub": "RAG significa Retrieval-Augmented Generation (geração aumentada por recuperação) — uma técnica que faz a IA responder com base nos seus documentos, e não no que ela decorou no treinamento.",
+    "about.card3.text": "Toda resposta cita o documento, a página e a seção de origem. Se a informação não estiver no documento, o sistema diz isso — ele nunca inventa um fato ou número.",
+    "rag.title": "O que é RAG?",
+    "rag.sub": "RAG significa Retrieval-Augmented Generation (geração aumentada por recuperação) — uma técnica que faz a IA responder com base nos seus documentos, e não no que ela decorou no treinamento. Letra por letra:",
+    "rag.r.title": "Retrieval (Recuperação)",
+    "rag.r.text": "O ato de buscar e trazer. Antes de responder qualquer coisa, o sistema recupera nos seus documentos os trechos mais relacionados à pergunta — como um bibliotecário que separa as páginas certas da estante.",
+    "rag.a.title": "Augmented (Aumentada)",
+    "rag.a.text": "Enriquecida, reforçada. O prompt da IA é aumentado com esses trechos recuperados: em vez de depender só da memória, o modelo recebe os excertos relevantes anexados à pergunta.",
+    "rag.g.title": "Generation (Geração)",
+    "rag.g.text": "A escrita da resposta. O modelo de linguagem gera o texto final usando apenas os trechos que recebeu, sob regras rígidas de citar a fonte de cada informação.",
     "rag.analogy": "<strong>Analogia da prova com consulta:</strong> um chat de IA comum é como um aluno fazendo prova de memória — quando não lembra, ele chuta (com convicção). O RAG transforma isso em prova com consulta: antes de responder, o sistema procura nos seus documentos os trechos relevantes, entrega esses trechos à IA e ordena: <em>“responda usando apenas isto, e diga de onde tirou.”</em>",
     "rag.step1.title": "1 · Indexação",
     "rag.step1.text": "O documento é dividido em pedaços pequenos (“chunks”), e cada pedaço é convertido em uma lista de números (um embedding) que captura seu significado. Significados parecidos viram números parecidos.",
@@ -609,13 +657,13 @@ const I18N = {
     "arch.title": "Arquitetura: do PDF à resposta",
     "arch.sub": "Cada etapa do pipeline é um módulo Python pequeno e legível — construído à mão justamente para expor o que os frameworks de RAG escondem debaixo do capô.",
     "arch.s1.title": "Extração — <code>src/extract.py</code>",
-    "arch.s1.text": "Lê o PDF com pdfplumber, separando texto corrido de tabelas. Tabela financeira misturada ao texto embaralha rótulos e valores — separá-las evita confundir “lucro líquido” com “vacância”. Links de páginas de RI são resolvidos e baixados automaticamente.",
+    "arch.s1.text": "Lê o PDF com pdfplumber, separando texto corrido de tabelas. Tabela misturada ao texto embaralha rótulos e valores — separá-las evita parear um rótulo com o valor errado. Links de páginas que contêm um PDF são resolvidos e baixados automaticamente.",
     "arch.s2.title": "Chunking — <code>src/chunking.py</code>",
     "arch.s2.text": "Divide o texto em pedaços de ~400 tokens, cortando primeiro por seção (“Resultado Financeiro”, “Distribuição de Rendimentos”...), depois por parágrafo, com sobreposição entre vizinhos. Tabelas nunca são divididas. Cada chunk carrega seus metadados — documento, página, seção — origem da citação de fonte.",
     "arch.s3.title": "Embeddings — <code>src/embeddings.py</code>",
     "arch.s3.text": "Converte cada pedaço em um vetor de 384 números usando o modelo all-MiniLM-L6-v2 (roda localmente, gratuito). Os vetores são normalizados para simplificar a comparação de similaridade na etapa seguinte.",
     "arch.s4.title": "Banco vetorial — <code>src/vector_store.py</code>",
-    "arch.s4.text": "Busca por similaridade de cosseno em NumPy puro — sem FAISS, sem Chroma. Na escala de alguns relatórios, uma multiplicação de matriz é instantânea, e o código inteiro cabe em uma tela: exatamente o que os bancos vetoriais “de verdade” fazem por baixo dos panos.",
+    "arch.s4.text": "Busca por similaridade de cosseno em NumPy puro — sem FAISS, sem Chroma. Na escala de alguns documentos, uma multiplicação de matriz é instantânea, e o código inteiro cabe em uma tela: exatamente o que os bancos vetoriais “de verdade” fazem por baixo dos panos.",
     "arch.s5.title": "Retrieval — <code>src/retrieval.py</code>",
     "arch.s5.text": "Transforma a pergunta em vetor e busca os 5 pedaços mais parecidos. Se nenhum passar do limiar mínimo de similaridade, o sistema conclui que a resposta não está no documento — um “não sei” honesto vale mais que um número inventado.",
     "arch.s6.title": "Montagem do prompt — <code>src/prompt_builder.py</code>",
@@ -645,16 +693,16 @@ const I18N = {
     "run.step4note": "O navegador abre automaticamente em <code>http://localhost:8501</code>.",
     "use.title": "Como usar",
     "use.li1": "<strong>Crie uma conversa</strong> (ou use a padrão). Cada conversa tem seus próprios documentos e histórico — renomeie ou apague pelo menu “⋯”.",
-    "use.li2": "<strong>Anexe o PDF do relatório</strong> (somente .pdf) no uploader, ou cole o link da página de RI no chat. O campo de perguntas só é liberado depois que um documento é processado, e a conversa é renomeada automaticamente com o nome do arquivo.",
-    "use.li3": "<strong>Pergunte em linguagem natural</strong> — ex.: “Qual foi o lucro líquido do trimestre?”, “Quanto o fundo distribuiu por cota este mês?”, “Qual a vacância atual?”",
+    "use.li2": "<strong>Anexe o PDF</strong> (somente .pdf) no uploader, ou cole um link no chat. O campo de perguntas só é liberado depois que um documento é processado, e a conversa é renomeada automaticamente com o nome do arquivo.",
+    "use.li3": "<strong>Pergunte em linguagem natural</strong> — ex.: “Qual o valor total do contrato?”, “O que o capítulo 3 conclui?”, “Quais os requisitos do sistema?”",
     "use.li4": "<strong>Confira a fonte</strong>: abaixo de cada resposta, o painel “📌 Fontes utilizadas” mostra o documento, a página e a seção de onde a informação foi extraída — você pode abrir o PDF e verificar.",
-    "use.li5": "<strong>Compare trimestres</strong>: anexe mais de um PDF na mesma conversa e faça perguntas comparativas (“a distribuição cresceu em relação ao trimestre anterior?”).",
-    "use.note": "💡 Se você perguntar algo que não está no documento (cotação de hoje, notícia recente), o sistema vai responder que a informação não está nos documentos fornecidos — esse é o comportamento correto, não um defeito.",
+    "use.li5": "<strong>Compare documentos</strong>: anexe mais de um PDF na mesma conversa e faça perguntas comparativas (“o que mudou entre as duas versões?”).",
+    "use.note": "💡 Se você perguntar algo que não está no documento (um fato externo, uma notícia recente), o sistema vai responder que a informação não está nos documentos fornecidos — esse é o comportamento correto, não um defeito.",
     "contact.title": "Explore o projeto",
     "contact.sub": "O código-fonte completo é aberto — cada módulo é pequeno o bastante para ler de uma sentada.",
     "contact.repo": "Repositório no GitHub",
     "contact.author": "Autor",
-    "footer.text": "Investor Relations Analysis — projeto de portfólio · RAG construído do zero em Python"
+    "footer.text": "Simple RAG PDF — projeto de portfólio · RAG construído do zero em Python"
   }
 };
 

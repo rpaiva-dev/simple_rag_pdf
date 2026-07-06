@@ -1,5 +1,5 @@
 """
-Front-end Streamlit do Investor Relations Analysis.
+Front-end Streamlit do Simple RAG PDF.
 
 Layout:
 - Canto superior esquerdo (topo da sidebar): título do app.
@@ -29,7 +29,7 @@ from src.retrieval import buscar
 from src.vector_store import VectorStore
 
 st.set_page_config(
-    page_title="Investor Relations Analysis", page_icon="📊", layout="wide"
+    page_title="Simple RAG PDF", page_icon="📄", layout="wide"
 )
 
 # CSS de ajustes finos que o Streamlit não expõe por parâmetro:
@@ -59,7 +59,7 @@ div[data-testid="stSidebarHeader"] {
     padding: 0.6rem 1rem 0.4rem 1rem;
 }
 div[data-testid="stSidebarHeader"]::before {
-    content: "📊 IR Analysis";
+    content: "📄 Simple RAG PDF";
     font-size: 1.15rem;
     font-weight: 700;
     white-space: nowrap;
@@ -74,9 +74,15 @@ div[data-testid="stSidebarHeader"] button {
 section[data-testid="stSidebar"] > div:first-child {
     padding-top: 0;
 }
-/* área principal também sobe (o botão de idioma acompanha o topo) */
+/* a barra superior do Streamlit fica transparente e sem altura útil,
+   e a área principal começa ABAIXO dela — sem isso, o botão de idioma
+   fica metade encoberto pela barra */
+header[data-testid="stHeader"] {
+    background: transparent;
+    height: 2.75rem;
+}
 div[data-testid="stMainBlockContainer"] {
-    padding-top: 1.5rem;
+    padding-top: 3.25rem;
 }
 
 /* 3) popover de três pontos: esconde a setinha e enxuga o botão */
@@ -94,10 +100,10 @@ div[data-testid="stPopover"] button {
 # ---------- i18n: todos os textos da interface nos dois idiomas ----------
 TEXTOS = {
     "pt": {
-        "titulo": "📊 Investor Relations Analysis",
+        "titulo": "📄 Simple RAG PDF",
         "subtitulo": (
-            "Anexe um relatório em **PDF** (somente .pdf) ou cole o **link** "
-            "da página de RI direto na mensagem. Depois pergunte — toda "
+            "Anexe um documento em **PDF** (somente .pdf) ou cole o **link** "
+            "de uma página que contenha o PDF. Depois pergunte — toda "
             "resposta cita a página/seção de origem."
         ),
         "nova_conversa": "➕ Nova conversa",
@@ -107,47 +113,64 @@ TEXTOS = {
         "renomear_dica": "Digite o novo nome e pressione Enter",
         "conversa_padrao": "Nova conversa",
         "anexe_inicio": (
-            "**Para começar, anexe o(s) relatório(s) em PDF** (somente .pdf) "
-            "ou cole o link da página de RI no chat abaixo."
+            "**Para começar, anexe o(s) documento(s) em PDF** (somente .pdf)."
         ),
-        "uploader_label": "Anexar PDF(s) do relatório — somente .pdf",
+        "uploader_label": "Anexar PDF(s) — somente .pdf",
         "placeholder_chat": (
-            "Pergunte, cole um link de RI, ou anexe um PDF (somente .pdf) 📎"
+            "Pergunte, cole um link, ou anexe um PDF (somente .pdf) 📎"
         ),
         "placeholder_bloqueado": (
-            "Anexe o PDF do relatório acima para liberar o chat 📎"
+            "Anexe o PDF acima para liberar o chat 📎"
         ),
         "processando": "Processando documento...",
         "fase_titulo": "⚙️ Processando '{nome}'...",
         "fase_extraindo": (
-            "**1/4 · Extração** — lendo o PDF, separando texto corrido "
-            "das tabelas financeiras..."
+            "**1/4 · Extração** (`src/extract.py`) — lendo o PDF com "
+            "pdfplumber, separando texto corrido das tabelas financeiras..."
         ),
         "fase_extraido": (
             "→ {n} blocos extraídos ({tabelas} tabelas detectadas)."
         ),
         "fase_chunking": (
-            "**2/4 · Chunking** — dividindo o texto em trechos por "
-            "seção/parágrafo (~400 tokens, tabelas intactas)..."
+            "**2/4 · Chunking** (`src/chunking.py`) — dividindo o texto em "
+            "trechos por seção/parágrafo (~400 tokens, tabelas intactas)..."
         ),
         "fase_chunks_ok": "→ {n} trechos gerados com metadados de página/seção.",
         "fase_embeddings": (
-            "**3/4 · Embeddings** — convertendo {n} trechos em vetores com "
-            "o modelo local (all-MiniLM-L6-v2)... é a etapa mais demorada."
+            "**3/4 · Embeddings** (`src/embeddings.py`) — convertendo {n} "
+            "trechos em vetores com o modelo local (all-MiniLM-L6-v2)... "
+            "é a etapa mais demorada."
         ),
         "fase_embeddings_ok": "→ vetores de {dim} dimensões gerados e normalizados.",
         "fase_indexando": (
-            "**4/4 · Indexação** — adicionando os vetores à base de busca "
-            "desta conversa..."
+            "**4/4 · Indexação** (`src/vector_store.py`) — adicionando os "
+            "vetores à base de busca desta conversa..."
         ),
-        "buscando": "Buscando nos relatórios...",
+        "buscando": "Buscando nos documentos...",
+        "resp_titulo": "🔎 Respondendo...",
+        "resp_retrieval": (
+            "**1/3 · Retrieval** (`src/retrieval.py`) — transformando a "
+            "pergunta em vetor e buscando os trechos mais similares..."
+        ),
+        "resp_retrieval_ok": "→ {n} trechos relevantes encontrados.",
+        "resp_prompt": (
+            "**2/3 · Montagem do prompt** (`src/prompt_builder.py`) — "
+            "juntando os trechos à pergunta com as regras de citação de "
+            "fonte e anti-alucinação..."
+        ),
+        "resp_llm": (
+            "**3/3 · LLM** (`src/llm_client.py`) — enviando à API da OpenAI "
+            "(gpt-4o-mini, temperature 0) e aguardando a resposta..."
+        ),
+        "resp_pronta": "✅ Resposta gerada.",
         "doc_processado": "✅ '{nome}' processado: {n} trechos indexados.",
         "sem_conteudo": "Nenhum conteúdo extraído do documento.",
         "erro_link": "Falha ao processar o link: {erro}",
         "sem_docs": (
-            "Anexe um PDF (📎, somente .pdf) ou cole um link de RI antes de "
+            "Anexe um PDF (📎, somente .pdf) ou cole um link antes de "
             "perguntar."
         ),
+        "ver_fases": "⚙️ Ver fases do processamento",
         "fontes": "📌 Fontes utilizadas",
         "pagina": "página",
         "secao": "seção",
@@ -157,11 +180,11 @@ TEXTOS = {
         "so_pdf": "⚠️ Somente arquivos .pdf são aceitos.",
     },
     "en": {
-        "titulo": "📊 Investor Relations Analysis",
+        "titulo": "📄 Simple RAG PDF",
         "subtitulo": (
-            "Attach a **PDF** report (only .pdf) or paste the IR page "
-            "**link** directly in the message. Then ask — every answer "
-            "cites the source page/section."
+            "Attach a **PDF** document (only .pdf) or paste the **link** of "
+            "a page containing the PDF. Then ask — every answer cites the "
+            "source page/section."
         ),
         "nova_conversa": "➕ New chat",
         "conversas": "Chats",
@@ -170,46 +193,63 @@ TEXTOS = {
         "renomear_dica": "Type the new name and press Enter",
         "conversa_padrao": "New chat",
         "anexe_inicio": (
-            "**To get started, attach the PDF report(s)** (only .pdf) or "
-            "paste the IR page link in the chat below."
+            "**To get started, attach the PDF document(s)** (only .pdf)."
         ),
-        "uploader_label": "Attach report PDF(s) — only .pdf",
+        "uploader_label": "Attach PDF(s) — only .pdf",
         "placeholder_chat": (
-            "Ask, paste an IR link, or attach a PDF (only .pdf) 📎"
+            "Ask, paste a link, or attach a PDF (only .pdf) 📎"
         ),
         "placeholder_bloqueado": (
-            "Attach the report PDF above to unlock the chat 📎"
+            "Attach the PDF above to unlock the chat 📎"
         ),
         "processando": "Processing document...",
         "fase_titulo": "⚙️ Processing '{nome}'...",
         "fase_extraindo": (
-            "**1/4 · Extraction** — reading the PDF, separating running "
-            "text from financial tables..."
+            "**1/4 · Extraction** (`src/extract.py`) — reading the PDF with "
+            "pdfplumber, separating running text from financial tables..."
         ),
         "fase_extraido": (
             "→ {n} blocks extracted ({tabelas} tables detected)."
         ),
         "fase_chunking": (
-            "**2/4 · Chunking** — splitting the text by section/paragraph "
-            "(~400 tokens, tables kept intact)..."
+            "**2/4 · Chunking** (`src/chunking.py`) — splitting the text by "
+            "section/paragraph (~400 tokens, tables kept intact)..."
         ),
         "fase_chunks_ok": "→ {n} chunks generated with page/section metadata.",
         "fase_embeddings": (
-            "**3/4 · Embeddings** — converting {n} chunks into vectors with "
-            "the local model (all-MiniLM-L6-v2)... this is the slowest step."
+            "**3/4 · Embeddings** (`src/embeddings.py`) — converting {n} "
+            "chunks into vectors with the local model (all-MiniLM-L6-v2)... "
+            "this is the slowest step."
         ),
         "fase_embeddings_ok": "→ {dim}-dimension vectors generated and normalized.",
         "fase_indexando": (
-            "**4/4 · Indexing** — adding the vectors to this chat's "
-            "search base..."
+            "**4/4 · Indexing** (`src/vector_store.py`) — adding the "
+            "vectors to this chat's search base..."
         ),
-        "buscando": "Searching the reports...",
+        "buscando": "Searching the documents...",
+        "resp_titulo": "🔎 Answering...",
+        "resp_retrieval": (
+            "**1/3 · Retrieval** (`src/retrieval.py`) — turning the "
+            "question into a vector and fetching the most similar chunks..."
+        ),
+        "resp_retrieval_ok": "→ {n} relevant chunks found.",
+        "resp_prompt": (
+            "**2/3 · Prompt assembly** (`src/prompt_builder.py`) — joining "
+            "the chunks to the question under the source-citation and "
+            "anti-hallucination rules..."
+        ),
+        "resp_llm": (
+            "**3/3 · LLM** (`src/llm_client.py`) — sending to the OpenAI "
+            "API (gpt-4o-mini, temperature 0) and waiting for the answer..."
+        ),
+        "resp_pronta": "✅ Answer generated.",
         "doc_processado": "✅ '{nome}' processed: {n} chunks indexed.",
         "sem_conteudo": "No content could be extracted from the document.",
         "erro_link": "Failed to process the link: {erro}",
         "sem_docs": (
-            "Attach a PDF (📎, only .pdf) or paste an IR link before asking."
+            "Attach a PDF (📎, only .pdf) or paste a link before asking."
         ),
+        "ver_fases": "⚙️ View processing phases",
         "fontes": "📌 Sources used",
         "pagina": "page",
         "secao": "section",
@@ -337,37 +377,42 @@ def processar_com_status(extrator, nome_doc: str) -> str:
     etapa — extração, chunking, embeddings, indexação — com o que está
     sendo feito e o que cada fase produziu.
     """
+    fases: list[str] = []  # registro das fases, exibido depois no histórico
+
     with st.status(
         T["fase_titulo"].format(nome=nome_doc), expanded=True
     ) as status:
+        def passo(texto_fase: str) -> None:
+            """Mostra a fase no painel e registra para o dropdown do histórico."""
+            fases.append(texto_fase)
+            st.write(texto_fase)
+
         # 1/4 — extração
-        st.write(T["fase_extraindo"])
+        passo(T["fase_extraindo"])
         blocos = extrator()
         n_tabelas = sum(1 for b in blocos if b.tipo == "tabela")
-        st.write(T["fase_extraido"].format(
-            n=len(blocos), tabelas=n_tabelas
-        ))
+        passo(T["fase_extraido"].format(n=len(blocos), tabelas=n_tabelas))
         # entrada por link: o nome real do documento (PDF baixado da página
         # de RI) só é conhecido depois da extração
         if nome_doc.lower().startswith(("http://", "https://")) and blocos:
             nome_doc = blocos[0].documento
 
         # 2/4 — chunking
-        st.write(T["fase_chunking"])
+        passo(T["fase_chunking"])
         chunks = gerar_chunks(blocos)
         if not chunks:
             status.update(label=T["sem_conteudo"], state="error",
                           expanded=False)
-            return T["sem_conteudo"]
-        st.write(T["fase_chunks_ok"].format(n=len(chunks)))
+            return T["sem_conteudo"], fases
+        passo(T["fase_chunks_ok"].format(n=len(chunks)))
 
         # 3/4 — embeddings (a fase mais demorada: modelo local)
-        st.write(T["fase_embeddings"].format(n=len(chunks)))
+        passo(T["fase_embeddings"].format(n=len(chunks)))
         embeddings = gerar_embeddings(chunks)
-        st.write(T["fase_embeddings_ok"].format(dim=embeddings.shape[1]))
+        passo(T["fase_embeddings_ok"].format(dim=embeddings.shape[1]))
 
         # 4/4 — indexação na base da conversa
-        st.write(T["fase_indexando"])
+        passo(T["fase_indexando"])
         conv["store"].adicionar(chunks, embeddings)
         conv["documentos"].append(nome_doc)
 
@@ -379,15 +424,24 @@ def processar_com_status(extrator, nome_doc: str) -> str:
 
         msg = T["doc_processado"].format(nome=nome_doc, n=len(chunks))
         status.update(label=msg, state="complete", expanded=False)
-    return msg
+    return msg, fases
 
 
-def processar_pdf_upload(arquivo) -> str:
+def processar_pdf_upload(arquivo) -> tuple[str, list[str]]:
     """Salva o PDF enviado em data/raw/ e indexa na conversa atual."""
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     destino = RAW_DIR / arquivo.name
     destino.write_bytes(arquivo.getvalue())
     return processar_com_status(lambda: extrair_pdf(destino), arquivo.name)
+
+
+def render_fases(fases: list[str]) -> None:
+    """Dropdown com o registro das fases de processamento do documento."""
+    if not fases:
+        return
+    with st.expander(T["ver_fases"]):
+        for f in fases:
+            st.markdown(f)
 
 
 def render_fontes(fontes: list[dict]) -> None:
@@ -416,14 +470,17 @@ if conv["store"].vazio:
             # evita reprocessar o mesmo arquivo em reruns do Streamlit
             if arquivo.name in conv["documentos"]:
                 continue
-            msg = processar_pdf_upload(arquivo)
-            conv["historico"].append({"papel": "assistant", "texto": msg})
+            msg, fases = processar_pdf_upload(arquivo)
+            conv["historico"].append(
+                {"papel": "assistant", "texto": msg, "fases": fases}
+            )
         st.rerun()
 
 # ---------- histórico da conversa atual ----------
 for item in conv["historico"]:
     with st.chat_message(item["papel"]):
         st.write(item["texto"])
+        render_fases(item.get("fases", []))
         render_fontes(item.get("fontes", []))
 
 # ---------- entrada do chat: texto + anexo PDF ----------
@@ -449,9 +506,12 @@ if entrada:
                 st.warning(T["so_pdf"])
             continue
         with st.chat_message("assistant"):
-            msg = processar_pdf_upload(arquivo)
+            msg, fases = processar_pdf_upload(arquivo)
             st.write(msg)
-        conv["historico"].append({"papel": "assistant", "texto": msg})
+            render_fases(fases)
+        conv["historico"].append(
+            {"papel": "assistant", "texto": msg, "fases": fases}
+        )
 
     # 2) link colado direto na mensagem
     url_match = RE_URL.search(texto)
@@ -462,11 +522,14 @@ if entrada:
         conv["historico"].append({"papel": "user", "texto": texto})
         with st.chat_message("assistant"):
             try:
-                msg = processar_com_status(lambda: extrair_url(url), url)
+                msg, fases = processar_com_status(lambda: extrair_url(url), url)
             except Exception as e:
-                msg = T["erro_link"].format(erro=e)
+                msg, fases = T["erro_link"].format(erro=e), []
             st.write(msg)
-        conv["historico"].append({"papel": "assistant", "texto": msg})
+            render_fases(fases)
+        conv["historico"].append(
+            {"papel": "assistant", "texto": msg, "fases": fases}
+        )
         # remove a URL do texto: o que sobrar pode ser uma pergunta
         texto = RE_URL.sub("", texto).strip()
 
@@ -480,10 +543,19 @@ if entrada:
                 st.write(texto)
             conv["historico"].append({"papel": "user", "texto": texto})
             with st.chat_message("assistant"):
-                with st.spinner(T["buscando"]):
+                # painel com as etapas 5-7 da arquitetura, em tempo real
+                with st.status(T["resp_titulo"], expanded=True) as status:
+                    st.write(T["resp_retrieval"])
                     resultados = buscar(texto, conv["store"], top_k=5)
+                    st.write(T["resp_retrieval_ok"].format(n=len(resultados)))
+
+                    st.write(T["resp_prompt"])
                     sistema, mensagem = montar_prompt(texto, resultados)
+
+                    st.write(T["resp_llm"])
                     resposta = responder(sistema, mensagem)
+                    status.update(label=T["resp_pronta"], state="complete",
+                                  expanded=False)
                 st.write(resposta)
                 fontes = [
                     {

@@ -12,14 +12,14 @@ Regras de ouro para RAG financeiro, todas explícitas na instrução:
 
 from src.vector_store import Resultado
 
-INSTRUCAO_SISTEMA = """Você é um assistente de análise de relatórios de Relação com Investidores (RI) de empresas listadas e Fundos Imobiliários (FIIs).
+INSTRUCAO_SISTEMA = """Você é um assistente de análise de documentos PDF.
 
 Regras obrigatórias:
 - Responda SOMENTE com base nos trechos de contexto fornecidos. Não use conhecimento externo.
-- Todo número financeiro citado deve estar LITERALMENTE presente no contexto. Nunca arredonde, estime, some ou derive valores que não estejam escritos.
+- Todo número, data ou fato citado deve estar LITERALMENTE presente no contexto. Nunca arredonde, estime, some ou derive valores que não estejam escritos.
 - Ao final da resposta, cite a fonte de cada informação no formato: (Documento, página X, seção "Y").
 - Se o contexto não contiver a informação pedida, responda exatamente que a informação não está presente nos documentos fornecidos. Não tente adivinhar.
-- Responda em português, de forma direta e objetiva."""
+- Responda no mesmo idioma da pergunta, de forma direta e objetiva."""
 
 RESPOSTA_SEM_CONTEXTO = (
     "Não encontrei essa informação nos documentos fornecidos. "
