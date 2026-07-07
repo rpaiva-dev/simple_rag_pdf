@@ -1,169 +1,173 @@
 """
-Módulo 2 — Chunking: transforma Blocos extraídos em chunks prontos para embedding.
+Module 2 — Chunking: turns extracted Blocks into embedding-ready chunks.
 
-Estratégia (na ordem de prioridade):
-1. Split por SEÇÃO: relatórios de RI têm títulos previsíveis ("Resultado
-   Financeiro", "Distribuição de Rendimentos", "Portfólio"...). Cortar na
-   fronteira de seção mantém cada chunk semanticamente coeso — o que melhora
-   muito o retrieval, porque a pergunta do usuário quase sempre mira UMA seção.
-2. Split por PARÁGRAFO dentro da seção, acumulando até o alvo de tamanho.
-3. Corte por tamanho fixo só como último recurso (parágrafo gigante).
+Strategy (in priority order):
+1. Split by SECTION: financial reports have predictable headings
+   ("Financial Results", "Dividend Distribution", "Portfolio"...). Cutting
+   at section boundaries keeps each chunk semantically cohesive — which
+   greatly improves retrieval, because the user's question almost always
+   targets ONE section.
+2. Split by PARAGRAPH within the section, accumulating up to the size target.
+3. Fixed-size cut only as a last resort (giant paragraph).
 
-Tabelas NÃO são divididas: uma tabela cortada ao meio separa rótulo de valor,
-que é exatamente o erro que queremos evitar em dado financeiro. Cada tabela
-vira um chunk próprio (tipo="tabela").
+Tables are NEVER split: a table cut in half separates label from value,
+which is exactly the mistake we want to avoid with financial data. Each
+table becomes its own chunk (kind="table").
 """
 
 import re
 from dataclasses import dataclass, asdict
 
-from src.extract import Bloco
+from src.extract import Block
 
-# Tamanhos em TOKENS aproximados. Não carregamos um tokenizador de verdade
-# aqui: para chunking, a aproximação de ~0.75 palavra/token (ou ~4 chars/token
-# em português) é suficiente e evita dependência pesada.
-ALVO_TOKENS = 400        # tamanho-alvo de cada chunk (~dentro de 300-500)
-MAX_TOKENS = 500         # teto duro antes de forçar corte
-OVERLAP_TOKENS = 75      # sobreposição entre chunks consecutivos
+# Sizes in approximate TOKENS. We don't load a real tokenizer here: for
+# chunking, the ~0.75 word/token approximation (or ~4 chars/token in
+# Portuguese) is good enough and avoids a heavy dependency.
+TARGET_TOKENS = 400      # target size of each chunk (~within 300-500)
+MAX_TOKENS = 500         # hard ceiling before forcing a cut
+OVERLAP_TOKENS = 75      # overlap between consecutive chunks
 
-# Regex de título de seção: linha curta, sem ponto final, começando com
-# maiúscula ou numeração ("3. Resultado Financeiro"). Heurística — cobre a
-# maioria dos relatórios gerenciais sem depender de fonte/negrito (que o
-# texto puro não preserva).
-RE_TITULO = re.compile(
+# Section-title regex: short line, no trailing period, starting with an
+# uppercase letter or numbering ("3. Financial Results"). Heuristic — covers
+# most management reports without relying on font/bold info (which plain
+# text does not preserve). Includes Portuguese accented capitals because the
+# target reports are in Portuguese.
+TITLE_RE = re.compile(
     r"^(?:\d+[\.\)]\s*)?[A-ZÁÉÍÓÚÂÊÔÃÕÇ][^\n.]{2,60}$"
 )
 
 
 @dataclass
 class Chunk:
-    """Chunk final: texto + metadados que viajam até a citação de fonte."""
-    texto: str
-    documento: str
-    pagina: int
-    secao: str
-    tipo: str  # "texto" ou "tabela"
+    """Final chunk: text + metadata that travels all the way to the citation."""
+    text: str
+    document: str
+    page: int
+    section: str
+    kind: str  # "text" or "table"
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
-def _n_tokens(texto: str) -> int:
-    """Estimativa barata de tokens (~0.75 palavra por token em pt-BR)."""
-    return int(len(texto.split()) / 0.75)
+def _n_tokens(text: str) -> int:
+    """Cheap token estimate (~0.75 word per token in pt-BR)."""
+    return int(len(text.split()) / 0.75)
 
 
-def _e_titulo(linha: str) -> bool:
-    linha = linha.strip()
-    # título costuma ser curto e sem verbo em minúscula no fim; o regex
-    # já filtra linhas longas e com ponto final
-    return bool(linha) and bool(RE_TITULO.match(linha))
+def _is_title(line: str) -> bool:
+    line = line.strip()
+    # titles are usually short with no trailing period; the regex already
+    # filters out long lines and lines ending in a period
+    return bool(line) and bool(TITLE_RE.match(line))
 
 
-def _dividir_em_secoes(texto: str) -> list[tuple[str, str]]:
-    """Divide texto de uma página em pares (titulo_secao, corpo)."""
-    secoes: list[tuple[str, str]] = []
-    titulo_atual = ""
-    corpo: list[str] = []
+def _split_into_sections(text: str) -> list[tuple[str, str]]:
+    """Splits a page's text into (section_title, body) pairs."""
+    sections: list[tuple[str, str]] = []
+    current_title = ""
+    body: list[str] = []
 
-    for linha in texto.split("\n"):
-        if _e_titulo(linha):
-            if corpo:
-                secoes.append((titulo_atual, "\n".join(corpo)))
-                corpo = []
-            titulo_atual = linha.strip()
+    for line in text.split("\n"):
+        if _is_title(line):
+            if body:
+                sections.append((current_title, "\n".join(body)))
+                body = []
+            current_title = line.strip()
         else:
-            corpo.append(linha)
+            body.append(line)
 
-    if corpo:
-        secoes.append((titulo_atual, "\n".join(corpo)))
-    return secoes
+    if body:
+        sections.append((current_title, "\n".join(body)))
+    return sections
 
 
-def _cortar_por_tamanho(paragrafos: list[str]) -> list[str]:
-    """Acumula parágrafos até o alvo; aplica overlap entre chunks vizinhos.
+def _split_by_size(paragraphs: list[str]) -> list[str]:
+    """Accumulates paragraphs up to the target; applies overlap between
+    neighboring chunks.
 
-    O overlap existe porque a informação relevante às vezes fica na fronteira
-    entre dois chunks — sem ele, uma frase cortada some do retrieval.
+    The overlap exists because relevant information sometimes sits right at
+    the boundary between two chunks — without it, a sentence cut in half
+    disappears from retrieval.
     """
     chunks: list[str] = []
-    atual: list[str] = []
-    tokens_atual = 0
+    current: list[str] = []
+    current_tokens = 0
 
-    for p in paragrafos:
+    for p in paragraphs:
         p = p.strip()
         if not p:
             continue
         t = _n_tokens(p)
 
-        # parágrafo sozinho já estoura o teto → corta por sentença
+        # a single paragraph already blows the ceiling → cut by sentence
         if t > MAX_TOKENS:
-            if atual:
-                chunks.append("\n".join(atual))
-                atual, tokens_atual = [], 0
-            sentencas = re.split(r"(?<=[.!?])\s+", p)
-            chunks.extend(_cortar_por_tamanho(sentencas))
+            if current:
+                chunks.append("\n".join(current))
+                current, current_tokens = [], 0
+            sentences = re.split(r"(?<=[.!?])\s+", p)
+            chunks.extend(_split_by_size(sentences))
             continue
 
-        if tokens_atual + t > ALVO_TOKENS and atual:
-            chunks.append("\n".join(atual))
-            # overlap: reaproveita o fim do chunk anterior como início do novo
-            cauda = []
-            tokens_cauda = 0
-            for trecho in reversed(atual):
-                tokens_cauda += _n_tokens(trecho)
-                cauda.insert(0, trecho)
-                if tokens_cauda >= OVERLAP_TOKENS:
+        if current_tokens + t > TARGET_TOKENS and current:
+            chunks.append("\n".join(current))
+            # overlap: reuse the tail of the previous chunk as the new start
+            tail = []
+            tail_tokens = 0
+            for piece in reversed(current):
+                tail_tokens += _n_tokens(piece)
+                tail.insert(0, piece)
+                if tail_tokens >= OVERLAP_TOKENS:
                     break
-            atual = cauda
-            tokens_atual = tokens_cauda
+            current = tail
+            current_tokens = tail_tokens
 
-        atual.append(p)
-        tokens_atual += t
+        current.append(p)
+        current_tokens += t
 
-    if atual:
-        chunks.append("\n".join(atual))
+    if current:
+        chunks.append("\n".join(current))
     return chunks
 
 
-def gerar_chunks(blocos: list[Bloco]) -> list[Chunk]:
-    """Pipeline de chunking sobre a saída do extract."""
+def build_chunks(blocks: list[Block]) -> list[Chunk]:
+    """Chunking pipeline over the extract module's output."""
     chunks: list[Chunk] = []
-    ultima_secao = ""  # seção "vaza" entre páginas: título na pág. 3 vale na 4
+    last_section = ""  # sections "leak" across pages: a title on p.3 holds on p.4
 
-    for bloco in blocos:
-        # Tabela = chunk atômico, nunca dividido.
-        if bloco.tipo == "tabela":
+    for block in blocks:
+        # Table = atomic chunk, never split.
+        if block.kind == "table":
             chunks.append(Chunk(
-                texto=bloco.conteudo,
-                documento=bloco.documento,
-                pagina=bloco.pagina,
-                secao=ultima_secao,
-                tipo="tabela",
+                text=block.content,
+                document=block.document,
+                page=block.page,
+                section=last_section,
+                kind="table",
             ))
             continue
 
-        for titulo, corpo in _dividir_em_secoes(bloco.conteudo):
-            if titulo:
-                ultima_secao = titulo
-            paragrafos = re.split(r"\n\s*\n", corpo)
-            # se a página veio sem linhas em branco entre parágrafos,
-            # usa as próprias linhas como unidade de acumulação
-            if len(paragrafos) == 1:
-                paragrafos = corpo.split("\n")
+        for title, body in _split_into_sections(block.content):
+            if title:
+                last_section = title
+            paragraphs = re.split(r"\n\s*\n", body)
+            # if the page came without blank lines between paragraphs, use
+            # the individual lines as the accumulation unit
+            if len(paragraphs) == 1:
+                paragraphs = body.split("\n")
 
-            for texto_chunk in _cortar_por_tamanho(paragrafos):
-                # prefixa o título da seção no texto: ajuda o embedding a
-                # "saber" o assunto do chunk mesmo quando o corpo é genérico
-                texto_final = (
-                    f"[{ultima_secao}]\n{texto_chunk}" if ultima_secao else texto_chunk
+            for chunk_text in _split_by_size(paragraphs):
+                # prefix the section title onto the text: helps the embedding
+                # "know" the chunk's topic even when the body is generic
+                final_text = (
+                    f"[{last_section}]\n{chunk_text}" if last_section else chunk_text
                 )
                 chunks.append(Chunk(
-                    texto=texto_final,
-                    documento=bloco.documento,
-                    pagina=bloco.pagina,
-                    secao=ultima_secao,
-                    tipo="texto",
+                    text=final_text,
+                    document=block.document,
+                    page=block.page,
+                    section=last_section,
+                    kind="text",
                 ))
 
     return chunks
@@ -171,9 +175,9 @@ def gerar_chunks(blocos: list[Bloco]) -> list[Chunk]:
 
 if __name__ == "__main__":
     import sys
-    from src.extract import extrair
-    cks = gerar_chunks(extrair(sys.argv[1]))
-    print(f"{len(cks)} chunks gerados")
+    from src.extract import extract
+    cks = build_chunks(extract(sys.argv[1]))
+    print(f"{len(cks)} chunks generated")
     for c in cks[:5]:
-        print(f"\n--- [{c.tipo}] pág. {c.pagina} | seção: {c.secao!r} ---")
-        print(c.texto[:250])
+        print(f"\n--- [{c.kind}] page {c.page} | section: {c.section!r} ---")
+        print(c.text[:250])

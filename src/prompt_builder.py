@@ -1,69 +1,70 @@
 """
-Módulo 6 — Prompt assembly: monta o prompt final para o LLM.
+Module 6 — Prompt assembly: builds the final prompt for the LLM.
 
-Regras de ouro para RAG financeiro, todas explícitas na instrução:
-1. Responder SOMENTE com o que está no contexto recuperado.
-2. Citar de qual fonte (documento/página/seção) veio cada informação.
-3. NUNCA arredondar, estimar ou "completar" número que não esteja literal
-   no contexto — número financeiro inventado é o pior erro possível aqui.
-4. Se o contexto não contém a resposta (ou se o retrieval veio vazio),
-   dizer isso claramente.
+Golden rules for financial RAG, all explicit in the instruction:
+1. Answer ONLY with what is in the retrieved context.
+2. Cite which source (document/page/section) each piece of information
+   came from.
+3. NEVER round, estimate or "complete" a number not literally present in
+   the context — a made-up financial number is the worst possible error.
+4. If the context doesn't contain the answer (or retrieval came back
+   empty), say so clearly.
 """
 
-from src.vector_store import Resultado
+from src.vector_store import SearchResult
 
-INSTRUCAO_SISTEMA = """Você é um assistente de análise de documentos PDF.
+SYSTEM_INSTRUCTION = """You are a PDF document analysis assistant.
 
-Regras obrigatórias:
-- Responda SOMENTE com base nos trechos de contexto fornecidos. Não use conhecimento externo.
-- Todo número, data ou fato citado deve estar LITERALMENTE presente no contexto. Nunca arredonde, estime, some ou derive valores que não estejam escritos.
-- Ao final da resposta, cite a fonte de cada informação no formato: (Documento, página X, seção "Y").
-- Se o contexto não contiver a informação pedida, responda exatamente que a informação não está presente nos documentos fornecidos. Não tente adivinhar.
-- Responda no mesmo idioma da pergunta, de forma direta e objetiva."""
+Mandatory rules:
+- Answer ONLY based on the context passages provided. Do not use external knowledge.
+- Every number, date or fact you mention must be LITERALLY present in the context. Never round, estimate, add up or derive values that are not written there.
+- At the end of the answer, cite the source of each piece of information in the format: (Document, page X, section "Y").
+- If the context does not contain the requested information, state explicitly that the information is not present in the provided documents. Do not guess.
+- Answer in the same language as the question, directly and objectively."""
 
-RESPOSTA_SEM_CONTEXTO = (
-    "Não encontrei essa informação nos documentos fornecidos. "
-    "Verifique se o relatório correto foi carregado ou reformule a pergunta."
+NO_CONTEXT_ANSWER = (
+    "I could not find that information in the provided documents. "
+    "Check that the right report was loaded or rephrase the question."
 )
 
 
-def _formatar_contexto(resultados: list[Resultado]) -> str:
-    """Formata cada chunk com cabeçalho de origem — o modelo precisa VER a
-    página/seção junto do texto para conseguir citar corretamente."""
-    partes = []
-    for i, r in enumerate(resultados, start=1):
+def _format_context(results: list[SearchResult]) -> str:
+    """Formats each chunk with a source header — the model needs to SEE the
+    page/section next to the text to be able to cite it correctly."""
+    parts = []
+    for i, r in enumerate(results, start=1):
         c = r.chunk
-        cabecalho = (
-            f"[Trecho {i} | documento: {c.documento} | página: {c.pagina}"
-            f" | seção: {c.secao or 'não identificada'}"
-            f" | tipo: {c.tipo}]"
+        header = (
+            f"[Passage {i} | document: {c.document} | page: {c.page}"
+            f" | section: {c.section or 'not identified'}"
+            f" | kind: {c.kind}]"
         )
-        partes.append(f"{cabecalho}\n{c.texto}")
-    return "\n\n---\n\n".join(partes)
+        parts.append(f"{header}\n{c.text}")
+    return "\n\n---\n\n".join(parts)
 
 
-def montar_prompt(pergunta: str, resultados: list[Resultado]) -> tuple[str, str]:
-    """Retorna (instrucao_sistema, mensagem_usuario) prontas para o LLM.
+def build_prompt(question: str, results: list[SearchResult]) -> tuple[str, str]:
+    """Returns (system_instruction, user_message) ready for the LLM.
 
-    O caso de retrieval vazio também gera um prompt (em vez de responder
-    direto sem LLM) — assim o modelo pode reformular a negativa de forma
-    natural, mas ancorado na instrução de não inventar.
+    The empty-retrieval case also produces a prompt (instead of replying
+    directly without the LLM) — this lets the model phrase the negative
+    naturally, while still anchored to the no-guessing instruction.
     """
-    if not resultados:
-        mensagem = (
-            "Nenhum trecho relevante foi encontrado nos documentos para a "
-            f"pergunta abaixo. Informe ao usuário que a informação não está "
-            f"nos documentos fornecidos.\n\nPergunta: {pergunta}"
+    if not results:
+        message = (
+            "No relevant passages were found in the documents for the "
+            "question below. Tell the user that the information is not "
+            f"present in the provided documents.\n\nQuestion: {question}"
         )
-        return INSTRUCAO_SISTEMA, mensagem
+        return SYSTEM_INSTRUCTION, message
 
-    contexto = _formatar_contexto(resultados)
-    mensagem = (
-        "Contexto recuperado dos relatórios:\n\n"
-        f"{contexto}\n\n"
+    context = _format_context(results)
+    message = (
+        "Context retrieved from the reports:\n\n"
+        f"{context}\n\n"
         "=====\n"
-        f"Pergunta do usuário: {pergunta}\n\n"
-        "Responda seguindo estritamente as regras do sistema, citando as "
-        "fontes (documento, página, seção) ao final."
+        f"User question: {question}\n\n"
+        "Answer strictly following the system rules, citing the sources "
+        "(document, page, section) at the end."
     )
-    return INSTRUCAO_SISTEMA, mensagem
+    return SYSTEM_INSTRUCTION, message

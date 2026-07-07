@@ -1,13 +1,14 @@
 """
-Módulo 7 — Cliente do LLM: chamada à API da OpenAI.
+Module 7 — LLM client: call to the OpenAI API.
 
-Chave lida do .env (OPENAI_API_KEY) via python-dotenv — nunca hardcoded.
-Modelo: gpt-4o-mini — barato e suficiente para a tarefa, porque o trabalho
-"difícil" (achar a informação certa) já foi feito pelo retrieval; o LLM só
-precisa ler o contexto e redigir com citação.
+Key read from .env (OPENAI_API_KEY) via python-dotenv — never hardcoded.
+Model: gpt-4o-mini — cheap and sufficient for the task, because the "hard"
+work (finding the right information) was already done by retrieval; the LLM
+only needs to read the context and write the answer with citations.
 
-temperature=0: em RAG financeiro queremos a resposta mais determinística
-possível — criatividade aqui só aumenta o risco de parafrasear número errado.
+temperature=0: in financial RAG we want the most deterministic answer
+possible — creativity here only raises the risk of paraphrasing a number
+incorrectly.
 """
 
 import os
@@ -17,34 +18,34 @@ from openai import OpenAI
 
 load_dotenv()
 
-MODELO = "gpt-4o-mini"
+MODEL = "gpt-4o-mini"
 
-_cliente: OpenAI | None = None
+_client: OpenAI | None = None
 
 
-def get_cliente() -> OpenAI:
-    """Cliente singleton; falha cedo e com mensagem clara se faltar a chave."""
-    global _cliente
-    if _cliente is None:
-        chave = os.getenv("OPENAI_API_KEY")
-        if not chave:
+def get_client() -> OpenAI:
+    """Singleton client; fails early with a clear message if the key is missing."""
+    global _client
+    if _client is None:
+        key = os.getenv("OPENAI_API_KEY")
+        if not key:
             raise RuntimeError(
-                "OPENAI_API_KEY não encontrada. Copie .env.example para .env "
-                "e preencha sua chave da OpenAI."
+                "OPENAI_API_KEY not found. Copy .env.example to .env and "
+                "fill in your OpenAI key."
             )
-        _cliente = OpenAI(api_key=chave)
-    return _cliente
+        _client = OpenAI(api_key=key)
+    return _client
 
 
-def responder(instrucao_sistema: str, mensagem_usuario: str) -> str:
-    """Envia o prompt montado e retorna o texto da resposta."""
-    resposta = get_cliente().chat.completions.create(
-        model=MODELO,
+def answer(system_instruction: str, user_message: str) -> str:
+    """Sends the assembled prompt and returns the response text."""
+    response = get_client().chat.completions.create(
+        model=MODEL,
         temperature=0,
         max_tokens=1000,
         messages=[
-            {"role": "system", "content": instrucao_sistema},
-            {"role": "user", "content": mensagem_usuario},
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_message},
         ],
     )
-    return resposta.choices[0].message.content or ""
+    return response.choices[0].message.content or ""

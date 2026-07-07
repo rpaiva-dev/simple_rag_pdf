@@ -1,10 +1,10 @@
 """
-Módulo 4 — Banco vetorial manual: busca por similaridade com NumPy puro.
+Module 4 — Hand-rolled vector store: similarity search with pure NumPy.
 
-Sem FAISS/Chroma de propósito: com centenas ou poucos milhares de chunks
-(escala de alguns relatórios), uma multiplicação de matriz é instantânea e
-o código inteiro cabe em uma tela — ideal para entender O QUE um banco
-vetorial realmente faz por baixo dos panos.
+No FAISS/Chroma on purpose: with hundreds or a few thousand chunks (the
+scale of a handful of reports), one matrix multiplication is instantaneous
+and the whole code fits on one screen — ideal for understanding WHAT a
+vector database actually does under the hood.
 """
 
 from dataclasses import dataclass
@@ -15,22 +15,22 @@ from src.chunking import Chunk
 
 
 @dataclass
-class Resultado:
+class SearchResult:
     chunk: Chunk
-    score: float  # similaridade de cosseno em [-1, 1]
+    score: float  # cosine similarity in [-1, 1]
 
 
 class VectorStore:
-    """Guarda chunks + embeddings e responde buscas por similaridade."""
+    """Holds chunks + embeddings and answers similarity searches."""
 
     def __init__(self):
         self.chunks: list[Chunk] = []
-        # matriz (n, 384); começa vazia e cresce a cada documento adicionado
+        # (n, 384) matrix; starts empty and grows with each added document
         self.embeddings: np.ndarray | None = None
 
-    def adicionar(self, chunks: list[Chunk], embeddings: np.ndarray) -> None:
-        """Anexa um documento novo à base (suporta múltiplos PDFs — é isso
-        que permite pergunta comparativa entre trimestres)."""
+    def add(self, chunks: list[Chunk], embeddings: np.ndarray) -> None:
+        """Appends a new document to the base (supports multiple PDFs —
+        this is what enables comparative questions across quarters)."""
         self.chunks.extend(chunks)
         if self.embeddings is None:
             self.embeddings = embeddings
@@ -38,26 +38,26 @@ class VectorStore:
             self.embeddings = np.vstack([self.embeddings, embeddings])
 
     @property
-    def vazio(self) -> bool:
+    def is_empty(self) -> bool:
         return self.embeddings is None or len(self.chunks) == 0
 
-    def search(self, query_embedding: np.ndarray, top_k: int = 5) -> list[Resultado]:
-        """Retorna os top_k chunks mais similares à pergunta.
+    def search(self, query_embedding: np.ndarray, top_k: int = 5) -> list[SearchResult]:
+        """Returns the top_k chunks most similar to the question.
 
-        Como TODOS os vetores foram normalizados na geração (norma 1),
-        cosseno(a, b) = a · b — então a busca inteira é um único produto
-        matriz-vetor, sem loop em Python.
+        Since ALL vectors were normalized at build time (norm 1),
+        cosine(a, b) = a · b — so the entire search is a single
+        matrix-vector product, no Python loop.
         """
-        if self.vazio:
+        if self.is_empty:
             return []
 
-        scores = self.embeddings @ query_embedding  # (n,) similaridades
+        scores = self.embeddings @ query_embedding  # (n,) similarities
 
-        # argpartition acha os k maiores em O(n) (sem ordenar tudo);
-        # depois ordenamos só esses k, do maior para o menor score.
+        # argpartition finds the k largest in O(n) (no full sort); then we
+        # sort only those k, from highest to lowest score.
         k = min(top_k, len(scores))
-        idx_topk = np.argpartition(scores, -k)[-k:]
-        idx_topk = idx_topk[np.argsort(scores[idx_topk])[::-1]]
+        topk_idx = np.argpartition(scores, -k)[-k:]
+        topk_idx = topk_idx[np.argsort(scores[topk_idx])[::-1]]
 
-        return [Resultado(chunk=self.chunks[i], score=float(scores[i]))
-                for i in idx_topk]
+        return [SearchResult(chunk=self.chunks[i], score=float(scores[i]))
+                for i in topk_idx]

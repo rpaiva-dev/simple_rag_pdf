@@ -1,24 +1,24 @@
 """
-Módulo 5 — Retrieval: da pergunta em linguagem natural aos chunks relevantes.
+Module 5 — Retrieval: from the natural-language question to relevant chunks.
 
-Camada fina que amarra embeddings + vector_store, e onde mora a decisão de
-"achei algo relevante ou não" (limiar de score) — usada depois pelo
-prompt_builder para instruir o modelo a admitir que não sabe.
+Thin layer tying embeddings + vector_store together, and where the "did I
+find anything relevant?" decision lives (score threshold) — used later by
+the prompt_builder to instruct the model to admit it doesn't know.
 """
 
-from src.embeddings import embed_pergunta
-from src.vector_store import Resultado, VectorStore
+from src.embeddings import embed_question
+from src.vector_store import SearchResult, VectorStore
 
-# Abaixo desse score de cosseno, consideramos que NENHUM chunk responde a
-# pergunta. Valor empírico para all-MiniLM-L6-v2: pares realmente
-# relacionados costumam ficar acima de ~0.35; abaixo disso é quase ruído.
-# Preferimos o falso "não sei" a uma resposta alucinada — em dado
-# financeiro, errar número é pior que não responder.
-SCORE_MINIMO = 0.30
+# Below this cosine score we consider that NO chunk answers the question.
+# Empirical value for all-MiniLM-L6-v2: truly related pairs usually score
+# above ~0.35; below that it's mostly noise. We prefer a false "I don't
+# know" over a hallucinated answer — with financial data, a wrong number
+# is worse than no answer.
+MIN_SCORE = 0.30
 
 
-def buscar(pergunta: str, store: VectorStore, top_k: int = 5) -> list[Resultado]:
-    """Embeda a pergunta e retorna os top_k chunks com score suficiente."""
-    query_emb = embed_pergunta(pergunta)
-    resultados = store.search(query_emb, top_k=top_k)
-    return [r for r in resultados if r.score >= SCORE_MINIMO]
+def search(question: str, store: VectorStore, top_k: int = 5) -> list[SearchResult]:
+    """Embeds the question and returns the top_k chunks scoring high enough."""
+    query_emb = embed_question(question)
+    results = store.search(query_emb, top_k=top_k)
+    return [r for r in results if r.score >= MIN_SCORE]

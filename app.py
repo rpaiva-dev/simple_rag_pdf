@@ -1,18 +1,18 @@
 """
-Front-end Streamlit do Simple RAG PDF.
+Streamlit front-end for Simple RAG PDF.
 
 Layout:
-- Canto superior esquerdo (topo da sidebar): título do app.
-- Sidebar: lista de CONVERSAS — criar, renomear (Enter salva) e apagar via
-  menu de três pontos (⋯). Cada conversa tem histórico e base vetorial
-  próprios (documentos isolados).
-- Conversa nova/vazia: pede logo o(s) PDF(s) antes de liberar perguntas.
-- Chat: anexo de PDF no campo de mensagem (somente .pdf) e detecção
-  automática de link colado.
-- Canto superior direito: botão de idioma PT/EN.
+- Top-left corner (sidebar header): app title.
+- Sidebar: list of CHATS — create, rename (Enter saves) and delete via the
+  three-dot menu (⋯). Each chat has its own history and vector store
+  (documents are isolated per chat).
+- New/empty chat: asks for the PDF(s) before unlocking questions.
+- Chat: PDF attachment in the message field (.pdf only) and automatic
+  detection of pasted links.
+- Top-right corner: PT/EN language toggle.
 
-Nota sobre Streamlit: o script re-executa INTEIRO a cada interação, então
-todo estado (conversas, stores, histórico) vive em st.session_state.
+Streamlit note: the script re-runs ENTIRELY on every interaction, so all
+state (chats, stores, history) lives in st.session_state.
 """
 
 import re
@@ -20,25 +20,25 @@ import uuid
 
 import streamlit as st
 
-from src.chunking import gerar_chunks
-from src.embeddings import gerar_embeddings
-from src.extract import RAW_DIR, extrair_pdf, extrair_url
-from src.llm_client import responder
-from src.prompt_builder import montar_prompt
-from src.retrieval import buscar
+from src.chunking import build_chunks
+from src.embeddings import build_embeddings
+from src.extract import RAW_DIR, extract_pdf, extract_url
+from src.llm_client import answer
+from src.prompt_builder import build_prompt
+from src.retrieval import search
 from src.vector_store import VectorStore
 
 st.set_page_config(
     page_title="Simple RAG PDF", page_icon="📄", layout="wide"
 )
 
-# CSS de ajustes finos que o Streamlit não expõe por parâmetro:
-# 1. mensagens do USUÁRIO alinhadas à direita (assistente fica à esquerda);
-# 2. título colado no topo da tela (remove o padding padrão da sidebar);
-# 3. botão de três pontos sem a setinha de dropdown do st.popover.
+# CSS fine-tuning for things Streamlit doesn't expose as parameters:
+# 1. USER messages aligned right (assistant stays on the left);
+# 2. title pinned to the top of the screen (removes sidebar default padding);
+# 3. three-dot button without the st.popover dropdown arrow.
 st.markdown("""
 <style>
-/* 1) mensagem do usuário à direita, estilo app de mensagem */
+/* 1) user message on the right, messaging-app style */
 div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarUser"]) {
     flex-direction: row-reverse;
     text-align: right;
@@ -50,8 +50,8 @@ div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarUser"])
     padding: 0.5rem 0.9rem;
 }
 
-/* 2) cabeçalho da sidebar: nome abreviado do app à esquerda, na mesma
-      linha do botão nativo de recolher a sidebar (que fica sempre visível) */
+/* 2) sidebar header: short app name on the left, on the same line as the
+      native sidebar-collapse button (kept always visible) */
 div[data-testid="stSidebarHeader"] {
     display: flex;
     align-items: center;
@@ -64,7 +64,7 @@ div[data-testid="stSidebarHeader"]::before {
     font-weight: 700;
     white-space: nowrap;
 }
-/* botão de recolher sempre visível (por padrão só aparece no hover) */
+/* collapse button always visible (by default it only shows on hover) */
 div[data-testid="stSidebarCollapseButton"],
 div[data-testid="stSidebarHeader"] button {
     display: inline-flex !important;
@@ -74,9 +74,9 @@ div[data-testid="stSidebarHeader"] button {
 section[data-testid="stSidebar"] > div:first-child {
     padding-top: 0;
 }
-/* a barra superior do Streamlit fica transparente e sem altura útil,
-   e a área principal começa ABAIXO dela — sem isso, o botão de idioma
-   fica metade encoberto pela barra */
+/* Streamlit's top bar is transparent with no useful height, and the main
+   area must start BELOW it — otherwise the language button ends up half
+   covered by the bar */
 header[data-testid="stHeader"] {
     background: transparent;
     height: 2.75rem;
@@ -85,7 +85,7 @@ div[data-testid="stMainBlockContainer"] {
     padding-top: 3.25rem;
 }
 
-/* 3) popover de três pontos: esconde a setinha e enxuga o botão */
+/* 3) three-dot popover: hide the arrow and slim down the button */
 div[data-testid="stPopover"] button svg {
     display: none;
 }
@@ -97,477 +97,477 @@ div[data-testid="stPopover"] button {
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- i18n: todos os textos da interface nos dois idiomas ----------
-TEXTOS = {
+# ---------- i18n: every UI string in both languages ----------
+TEXTS = {
     "pt": {
-        "titulo": "📄 Simple RAG PDF",
-        "subtitulo": (
+        "title": "📄 Simple RAG PDF",
+        "subtitle": (
             "Anexe um documento em **PDF** (somente .pdf) ou cole o **link** "
             "de uma página que contenha o PDF. Depois pergunte — toda "
             "resposta cita a página/seção de origem."
         ),
-        "nova_conversa": "➕ Nova conversa",
-        "conversas": "Conversas",
-        "renomear": "✏️ Renomear",
-        "apagar": "🗑️ Apagar",
-        "renomear_dica": "Digite o novo nome e pressione Enter",
-        "conversa_padrao": "Nova conversa",
-        "anexe_inicio": (
+        "new_chat": "➕ Nova conversa",
+        "chats": "Conversas",
+        "rename": "✏️ Renomear",
+        "delete": "🗑️ Apagar",
+        "rename_hint": "Digite o novo nome e pressione Enter",
+        "default_chat_name": "Nova conversa",
+        "attach_to_start": (
             "**Para começar, anexe o(s) documento(s) em PDF** (somente .pdf)."
         ),
         "uploader_label": "Anexar PDF(s) — somente .pdf",
-        "placeholder_chat": (
+        "chat_placeholder": (
             "Pergunte, cole um link, ou anexe um PDF (somente .pdf) 📎"
         ),
-        "placeholder_bloqueado": (
+        "locked_placeholder": (
             "Anexe o PDF acima para liberar o chat 📎"
         ),
-        "processando": "Processando documento...",
-        "fase_titulo": "⚙️ Processando '{nome}'...",
-        "fase_extraindo": (
+        "processing": "Processando documento...",
+        "phase_title": "⚙️ Processando '{name}'...",
+        "phase_extracting": (
             "**1/4 · Extração** (`src/extract.py`) — lendo o PDF com "
             "pdfplumber, separando texto corrido das tabelas financeiras..."
         ),
-        "fase_extraido": (
-            "→ {n} blocos extraídos ({tabelas} tabelas detectadas)."
+        "phase_extracted": (
+            "→ {n} blocos extraídos ({tables} tabelas detectadas)."
         ),
-        "fase_chunking": (
+        "phase_chunking": (
             "**2/4 · Chunking** (`src/chunking.py`) — dividindo o texto em "
             "trechos por seção/parágrafo (~400 tokens, tabelas intactas)..."
         ),
-        "fase_chunks_ok": "→ {n} trechos gerados com metadados de página/seção.",
-        "fase_embeddings": (
+        "phase_chunks_ok": "→ {n} trechos gerados com metadados de página/seção.",
+        "phase_embeddings": (
             "**3/4 · Embeddings** (`src/embeddings.py`) — convertendo {n} "
             "trechos em vetores com o modelo local (all-MiniLM-L6-v2)... "
             "é a etapa mais demorada."
         ),
-        "fase_embeddings_ok": "→ vetores de {dim} dimensões gerados e normalizados.",
-        "fase_indexando": (
+        "phase_embeddings_ok": "→ vetores de {dim} dimensões gerados e normalizados.",
+        "phase_indexing": (
             "**4/4 · Indexação** (`src/vector_store.py`) — adicionando os "
             "vetores à base de busca desta conversa..."
         ),
-        "buscando": "Buscando nos documentos...",
-        "resp_titulo": "🔎 Respondendo...",
-        "resp_retrieval": (
+        "searching": "Buscando nos documentos...",
+        "answer_title": "🔎 Respondendo...",
+        "answer_retrieval": (
             "**1/3 · Retrieval** (`src/retrieval.py`) — transformando a "
             "pergunta em vetor e buscando os trechos mais similares..."
         ),
-        "resp_retrieval_ok": "→ {n} trechos relevantes encontrados.",
-        "resp_prompt": (
+        "answer_retrieval_ok": "→ {n} trechos relevantes encontrados.",
+        "answer_prompt": (
             "**2/3 · Montagem do prompt** (`src/prompt_builder.py`) — "
             "juntando os trechos à pergunta com as regras de citação de "
             "fonte e anti-alucinação..."
         ),
-        "resp_llm": (
+        "answer_llm": (
             "**3/3 · LLM** (`src/llm_client.py`) — enviando à API da OpenAI "
             "(gpt-4o-mini, temperature 0) e aguardando a resposta..."
         ),
-        "resp_pronta": "✅ Resposta gerada.",
-        "doc_processado": "✅ '{nome}' processado: {n} trechos indexados.",
-        "sem_conteudo": "Nenhum conteúdo extraído do documento.",
-        "erro_link": "Falha ao processar o link: {erro}",
-        "sem_docs": (
+        "answer_ready": "✅ Resposta gerada.",
+        "doc_processed": "✅ '{name}' processado: {n} trechos indexados.",
+        "no_content": "Nenhum conteúdo extraído do documento.",
+        "link_error": "Falha ao processar o link: {error}",
+        "no_docs": (
             "Anexe um PDF (📎, somente .pdf) ou cole um link antes de "
             "perguntar."
         ),
-        "ver_fases": "⚙️ Ver fases do processamento",
-        "fontes": "📌 Fontes utilizadas",
-        "pagina": "página",
-        "secao": "seção",
-        "sem_secao": "não identificada",
-        "similaridade": "similaridade",
-        "docs_carregados": "Documentos desta conversa:",
-        "so_pdf": "⚠️ Somente arquivos .pdf são aceitos.",
+        "view_phases": "⚙️ Ver fases do processamento",
+        "sources": "📌 Fontes utilizadas",
+        "page": "página",
+        "section": "seção",
+        "no_section": "não identificada",
+        "similarity": "similaridade",
+        "loaded_docs": "Documentos desta conversa:",
+        "pdf_only": "⚠️ Somente arquivos .pdf são aceitos.",
     },
     "en": {
-        "titulo": "📄 Simple RAG PDF",
-        "subtitulo": (
+        "title": "📄 Simple RAG PDF",
+        "subtitle": (
             "Attach a **PDF** document (only .pdf) or paste the **link** of "
             "a page containing the PDF. Then ask — every answer cites the "
             "source page/section."
         ),
-        "nova_conversa": "➕ New chat",
-        "conversas": "Chats",
-        "renomear": "✏️ Rename",
-        "apagar": "🗑️ Delete",
-        "renomear_dica": "Type the new name and press Enter",
-        "conversa_padrao": "New chat",
-        "anexe_inicio": (
+        "new_chat": "➕ New chat",
+        "chats": "Chats",
+        "rename": "✏️ Rename",
+        "delete": "🗑️ Delete",
+        "rename_hint": "Type the new name and press Enter",
+        "default_chat_name": "New chat",
+        "attach_to_start": (
             "**To get started, attach the PDF document(s)** (only .pdf)."
         ),
         "uploader_label": "Attach PDF(s) — only .pdf",
-        "placeholder_chat": (
+        "chat_placeholder": (
             "Ask, paste a link, or attach a PDF (only .pdf) 📎"
         ),
-        "placeholder_bloqueado": (
+        "locked_placeholder": (
             "Attach the PDF above to unlock the chat 📎"
         ),
-        "processando": "Processing document...",
-        "fase_titulo": "⚙️ Processing '{nome}'...",
-        "fase_extraindo": (
+        "processing": "Processing document...",
+        "phase_title": "⚙️ Processing '{name}'...",
+        "phase_extracting": (
             "**1/4 · Extraction** (`src/extract.py`) — reading the PDF with "
             "pdfplumber, separating running text from financial tables..."
         ),
-        "fase_extraido": (
-            "→ {n} blocks extracted ({tabelas} tables detected)."
+        "phase_extracted": (
+            "→ {n} blocks extracted ({tables} tables detected)."
         ),
-        "fase_chunking": (
+        "phase_chunking": (
             "**2/4 · Chunking** (`src/chunking.py`) — splitting the text by "
             "section/paragraph (~400 tokens, tables kept intact)..."
         ),
-        "fase_chunks_ok": "→ {n} chunks generated with page/section metadata.",
-        "fase_embeddings": (
+        "phase_chunks_ok": "→ {n} chunks generated with page/section metadata.",
+        "phase_embeddings": (
             "**3/4 · Embeddings** (`src/embeddings.py`) — converting {n} "
             "chunks into vectors with the local model (all-MiniLM-L6-v2)... "
             "this is the slowest step."
         ),
-        "fase_embeddings_ok": "→ {dim}-dimension vectors generated and normalized.",
-        "fase_indexando": (
+        "phase_embeddings_ok": "→ {dim}-dimension vectors generated and normalized.",
+        "phase_indexing": (
             "**4/4 · Indexing** (`src/vector_store.py`) — adding the "
             "vectors to this chat's search base..."
         ),
-        "buscando": "Searching the documents...",
-        "resp_titulo": "🔎 Answering...",
-        "resp_retrieval": (
+        "searching": "Searching the documents...",
+        "answer_title": "🔎 Answering...",
+        "answer_retrieval": (
             "**1/3 · Retrieval** (`src/retrieval.py`) — turning the "
             "question into a vector and fetching the most similar chunks..."
         ),
-        "resp_retrieval_ok": "→ {n} relevant chunks found.",
-        "resp_prompt": (
+        "answer_retrieval_ok": "→ {n} relevant chunks found.",
+        "answer_prompt": (
             "**2/3 · Prompt assembly** (`src/prompt_builder.py`) — joining "
             "the chunks to the question under the source-citation and "
             "anti-hallucination rules..."
         ),
-        "resp_llm": (
+        "answer_llm": (
             "**3/3 · LLM** (`src/llm_client.py`) — sending to the OpenAI "
             "API (gpt-4o-mini, temperature 0) and waiting for the answer..."
         ),
-        "resp_pronta": "✅ Answer generated.",
-        "doc_processado": "✅ '{nome}' processed: {n} chunks indexed.",
-        "sem_conteudo": "No content could be extracted from the document.",
-        "erro_link": "Failed to process the link: {erro}",
-        "sem_docs": (
+        "answer_ready": "✅ Answer generated.",
+        "doc_processed": "✅ '{name}' processed: {n} chunks indexed.",
+        "no_content": "No content could be extracted from the document.",
+        "link_error": "Failed to process the link: {error}",
+        "no_docs": (
             "Attach a PDF (📎, only .pdf) or paste a link before asking."
         ),
-        "ver_fases": "⚙️ View processing phases",
-        "fontes": "📌 Sources used",
-        "pagina": "page",
-        "secao": "section",
-        "sem_secao": "not identified",
-        "similaridade": "similarity",
-        "docs_carregados": "Documents in this chat:",
-        "so_pdf": "⚠️ Only .pdf files are accepted.",
+        "view_phases": "⚙️ View processing phases",
+        "sources": "📌 Sources used",
+        "page": "page",
+        "section": "section",
+        "no_section": "not identified",
+        "similarity": "similarity",
+        "loaded_docs": "Documents in this chat:",
+        "pdf_only": "⚠️ Only .pdf files are accepted.",
     },
 }
 
-RE_URL = re.compile(r"https?://\S+")
+URL_RE = re.compile(r"https?://\S+")
 
-# ---------- estado de sessão ----------
-if "idioma" not in st.session_state:
-    st.session_state.idioma = "pt"
+# ---------- session state ----------
+if "language" not in st.session_state:
+    st.session_state.language = "pt"
 
 
-def nova_conversa() -> str:
-    """Cria uma conversa vazia e retorna seu id."""
+def new_chat() -> str:
+    """Creates an empty chat and returns its id."""
     cid = uuid.uuid4().hex[:8]
-    st.session_state.conversas[cid] = {
-        "nome": TEXTOS[st.session_state.idioma]["conversa_padrao"],
-        "historico": [],      # [{papel, texto, fontes}]
+    st.session_state.chats[cid] = {
+        "name": TEXTS[st.session_state.language]["default_chat_name"],
+        "history": [],        # [{role, text, sources}]
         "store": VectorStore(),
-        "documentos": [],
+        "documents": [],
     }
     return cid
 
 
-if "conversas" not in st.session_state:
-    st.session_state.conversas = {}
-    st.session_state.conversa_atual = nova_conversa()
-if "renomeando" not in st.session_state:
-    st.session_state.renomeando = None  # id da conversa em edição de nome
+if "chats" not in st.session_state:
+    st.session_state.chats = {}
+    st.session_state.current_chat = new_chat()
+if "renaming" not in st.session_state:
+    st.session_state.renaming = None  # id of the chat whose name is being edited
 
-T = TEXTOS[st.session_state.idioma]
-
-
-def _salvar_nome(cid: str) -> None:
-    """Callback do text_input de renomear: Enter dispara on_change e salva."""
-    novo = st.session_state.get(f"nome_{cid}", "").strip()
-    if novo:
-        st.session_state.conversas[cid]["nome"] = novo
-    st.session_state.renomeando = None
+T = TEXTS[st.session_state.language]
 
 
-# ---------- sidebar: título no canto superior esquerdo + conversas ----------
+def _save_name(cid: str) -> None:
+    """Rename text_input callback: Enter triggers on_change and saves."""
+    new_name = st.session_state.get(f"name_{cid}", "").strip()
+    if new_name:
+        st.session_state.chats[cid]["name"] = new_name
+    st.session_state.renaming = None
+
+
+# ---------- sidebar: title in the top-left corner + chat list ----------
 with st.sidebar:
-    if st.button(T["nova_conversa"], use_container_width=True):
-        st.session_state.conversa_atual = nova_conversa()
-        st.session_state.renomeando = None
+    if st.button(T["new_chat"], use_container_width=True):
+        st.session_state.current_chat = new_chat()
+        st.session_state.renaming = None
         st.rerun()
 
-    st.subheader(T["conversas"])
+    st.subheader(T["chats"])
 
-    for cid in list(st.session_state.conversas):
-        conv_item = st.session_state.conversas[cid]
-        ativa = cid == st.session_state.conversa_atual
+    for cid in list(st.session_state.chats):
+        chat_item = st.session_state.chats[cid]
+        is_active = cid == st.session_state.current_chat
 
-        if st.session_state.renomeando == cid:
-            # Enter no campo salva (on_change) — sem botão extra
+        if st.session_state.renaming == cid:
+            # Enter in the field saves (on_change) — no extra button
             st.text_input(
-                T["renomear_dica"],
-                value=conv_item["nome"],
-                key=f"nome_{cid}",
-                on_change=_salvar_nome,
+                T["rename_hint"],
+                value=chat_item["name"],
+                key=f"name_{cid}",
+                on_change=_save_name,
                 args=(cid,),
             )
         else:
-            col_nome, col_menu = st.columns([6, 1])
-            with col_nome:
-                rotulo = f"**{conv_item['nome']}**" if ativa else conv_item["nome"]
-                if st.button(rotulo, key=f"abrir_{cid}",
+            name_col, menu_col = st.columns([6, 1])
+            with name_col:
+                label = f"**{chat_item['name']}**" if is_active else chat_item["name"]
+                if st.button(label, key=f"open_{cid}",
                              use_container_width=True):
-                    st.session_state.conversa_atual = cid
+                    st.session_state.current_chat = cid
                     st.rerun()
-            with col_menu:
-                # menu de três pontos com as ações da conversa
+            with menu_col:
+                # three-dot menu with the chat actions
                 with st.popover("⋯"):
-                    if st.button(T["renomear"], key=f"ren_{cid}",
+                    if st.button(T["rename"], key=f"ren_{cid}",
                                  use_container_width=True):
-                        st.session_state.renomeando = cid
+                        st.session_state.renaming = cid
                         st.rerun()
-                    if st.button(T["apagar"], key=f"del_{cid}",
+                    if st.button(T["delete"], key=f"del_{cid}",
                                  use_container_width=True):
-                        del st.session_state.conversas[cid]
-                        if not st.session_state.conversas:
-                            st.session_state.conversa_atual = nova_conversa()
-                        elif cid == st.session_state.conversa_atual:
-                            st.session_state.conversa_atual = next(
-                                iter(st.session_state.conversas)
+                        del st.session_state.chats[cid]
+                        if not st.session_state.chats:
+                            st.session_state.current_chat = new_chat()
+                        elif cid == st.session_state.current_chat:
+                            st.session_state.current_chat = next(
+                                iter(st.session_state.chats)
                             )
                         st.rerun()
 
-conv = st.session_state.conversas[st.session_state.conversa_atual]
+chat = st.session_state.chats[st.session_state.current_chat]
 
-# ---------- topo da área principal: botão de idioma à direita ----------
-_, col_idioma = st.columns([10, 1])
-with col_idioma:
-    outro = "en" if st.session_state.idioma == "pt" else "pt"
-    if st.button("🇺🇸 EN" if outro == "en" else "🇧🇷 PT",
+# ---------- top of the main area: language button on the right ----------
+_, lang_col = st.columns([10, 1])
+with lang_col:
+    other = "en" if st.session_state.language == "pt" else "pt"
+    if st.button("🇺🇸 EN" if other == "en" else "🇧🇷 PT",
                  help="Switch language / Mudar idioma"):
-        st.session_state.idioma = outro
+        st.session_state.language = other
         st.rerun()
 
-st.caption(T["subtitulo"])
+st.caption(T["subtitle"])
 
-if conv["documentos"]:
-    st.caption(T["docs_carregados"] + " " + " • ".join(conv["documentos"]))
-
-
-def _resumir_nome_doc(nome_doc: str) -> str:
-    """Gera um nome curto de conversa a partir do nome do documento:
-    remove extensão e separadores, e trunca para caber na sidebar."""
-    nome = re.sub(r"\.pdf$", "", nome_doc, flags=re.IGNORECASE)
-    nome = re.sub(r"[_\-]+", " ", nome).strip()
-    return (nome[:32] + "…") if len(nome) > 32 else (nome or nome_doc)
+if chat["documents"]:
+    st.caption(T["loaded_docs"] + " " + " • ".join(chat["documents"]))
 
 
-def processar_com_status(extrator, nome_doc: str) -> str:
-    """Roda o pipeline completo mostrando cada fase em tempo real.
+def _short_doc_name(doc_name: str) -> str:
+    """Builds a short chat name from the document name: strips the
+    extension and separators, and truncates to fit the sidebar."""
+    name = re.sub(r"\.pdf$", "", doc_name, flags=re.IGNORECASE)
+    name = re.sub(r"[_\-]+", " ", name).strip()
+    return (name[:32] + "…") if len(name) > 32 else (name or doc_name)
 
-    `extrator` é uma função sem argumentos que devolve os Blocos (permite
-    reusar o mesmo fluxo para PDF e para link). O st.status exibe cada
-    etapa — extração, chunking, embeddings, indexação — com o que está
-    sendo feito e o que cada fase produziu.
+
+def process_with_status(extractor, doc_name: str) -> str:
+    """Runs the full pipeline showing each phase in real time.
+
+    `extractor` is a zero-argument function returning the Blocks (lets the
+    same flow be reused for PDF and link). st.status displays each stage —
+    extraction, chunking, embeddings, indexing — with what is being done
+    and what each phase produced.
     """
-    fases: list[str] = []  # registro das fases, exibido depois no histórico
+    phases: list[str] = []  # phase log, shown later in the history
 
     with st.status(
-        T["fase_titulo"].format(nome=nome_doc), expanded=True
+        T["phase_title"].format(name=doc_name), expanded=True
     ) as status:
-        def passo(texto_fase: str) -> None:
-            """Mostra a fase no painel e registra para o dropdown do histórico."""
-            fases.append(texto_fase)
-            st.write(texto_fase)
+        def step(phase_text: str) -> None:
+            """Shows the phase in the panel and logs it for the history dropdown."""
+            phases.append(phase_text)
+            st.write(phase_text)
 
-        # 1/4 — extração
-        passo(T["fase_extraindo"])
-        blocos = extrator()
-        n_tabelas = sum(1 for b in blocos if b.tipo == "tabela")
-        passo(T["fase_extraido"].format(n=len(blocos), tabelas=n_tabelas))
-        # entrada por link: o nome real do documento (PDF baixado da página
-        # de RI) só é conhecido depois da extração
-        if nome_doc.lower().startswith(("http://", "https://")) and blocos:
-            nome_doc = blocos[0].documento
+        # 1/4 — extraction
+        step(T["phase_extracting"])
+        blocks = extractor()
+        n_tables = sum(1 for b in blocks if b.kind == "table")
+        step(T["phase_extracted"].format(n=len(blocks), tables=n_tables))
+        # link input: the real document name (PDF downloaded from the page)
+        # is only known after extraction
+        if doc_name.lower().startswith(("http://", "https://")) and blocks:
+            doc_name = blocks[0].document
 
         # 2/4 — chunking
-        passo(T["fase_chunking"])
-        chunks = gerar_chunks(blocos)
+        step(T["phase_chunking"])
+        chunks = build_chunks(blocks)
         if not chunks:
-            status.update(label=T["sem_conteudo"], state="error",
+            status.update(label=T["no_content"], state="error",
                           expanded=False)
-            return T["sem_conteudo"], fases
-        passo(T["fase_chunks_ok"].format(n=len(chunks)))
+            return T["no_content"], phases
+        step(T["phase_chunks_ok"].format(n=len(chunks)))
 
-        # 3/4 — embeddings (a fase mais demorada: modelo local)
-        passo(T["fase_embeddings"].format(n=len(chunks)))
-        embeddings = gerar_embeddings(chunks)
-        passo(T["fase_embeddings_ok"].format(dim=embeddings.shape[1]))
+        # 3/4 — embeddings (the slowest phase: local model)
+        step(T["phase_embeddings"].format(n=len(chunks)))
+        embeddings = build_embeddings(chunks)
+        step(T["phase_embeddings_ok"].format(dim=embeddings.shape[1]))
 
-        # 4/4 — indexação na base da conversa
-        passo(T["fase_indexando"])
-        conv["store"].adicionar(chunks, embeddings)
-        conv["documentos"].append(nome_doc)
+        # 4/4 — indexing into this chat's base
+        step(T["phase_indexing"])
+        chat["store"].add(chunks, embeddings)
+        chat["documents"].append(doc_name)
 
-        # primeira ingestão numa conversa ainda com nome padrão → renomeia
-        # automaticamente para um resumo do nome do documento
-        nomes_padrao = {t["conversa_padrao"] for t in TEXTOS.values()}
-        if conv["nome"] in nomes_padrao:
-            conv["nome"] = _resumir_nome_doc(nome_doc)
+        # first ingestion into a chat still using the default name →
+        # auto-rename to a short version of the document name
+        default_names = {t["default_chat_name"] for t in TEXTS.values()}
+        if chat["name"] in default_names:
+            chat["name"] = _short_doc_name(doc_name)
 
-        msg = T["doc_processado"].format(nome=nome_doc, n=len(chunks))
+        msg = T["doc_processed"].format(name=doc_name, n=len(chunks))
         status.update(label=msg, state="complete", expanded=False)
-    return msg, fases
+    return msg, phases
 
 
-def processar_pdf_upload(arquivo) -> tuple[str, list[str]]:
-    """Salva o PDF enviado em data/raw/ e indexa na conversa atual."""
+def process_pdf_upload(file) -> tuple[str, list[str]]:
+    """Saves the uploaded PDF into data/raw/ and indexes it in the current chat."""
     RAW_DIR.mkdir(parents=True, exist_ok=True)
-    destino = RAW_DIR / arquivo.name
-    destino.write_bytes(arquivo.getvalue())
-    return processar_com_status(lambda: extrair_pdf(destino), arquivo.name)
+    target = RAW_DIR / file.name
+    target.write_bytes(file.getvalue())
+    return process_with_status(lambda: extract_pdf(target), file.name)
 
 
-def render_fases(fases: list[str]) -> None:
-    """Dropdown com o registro das fases de processamento do documento."""
-    if not fases:
+def render_phases(phases: list[str]) -> None:
+    """Dropdown with the document-processing phase log."""
+    if not phases:
         return
-    with st.expander(T["ver_fases"]):
-        for f in fases:
-            st.markdown(f)
+    with st.expander(T["view_phases"]):
+        for p in phases:
+            st.markdown(p)
 
 
-def render_fontes(fontes: list[dict]) -> None:
-    if not fontes:
+def render_sources(sources: list[dict]) -> None:
+    if not sources:
         return
-    with st.expander(T["fontes"]):
-        for f in fontes:
+    with st.expander(T["sources"]):
+        for s in sources:
             st.markdown(
-                f"**{f['documento']}** — {T['pagina']} {f['pagina']}, "
-                f"{T['secao']} *{f['secao'] or T['sem_secao']}* "
-                f"({f['tipo']}, {T['similaridade']} {f['score']:.2f})"
+                f"**{s['document']}** — {T['page']} {s['page']}, "
+                f"{T['section']} *{s['section'] or T['no_section']}* "
+                f"({s['kind']}, {T['similarity']} {s['score']:.2f})"
             )
 
 
-# ---------- conversa nova/vazia: pede o(s) PDF(s) logo de cara ----------
-if conv["store"].vazio:
-    st.info(T["anexe_inicio"])
-    arquivos_iniciais = st.file_uploader(
+# ---------- new/empty chat: asks for the PDF(s) right away ----------
+if chat["store"].is_empty:
+    st.info(T["attach_to_start"])
+    initial_files = st.file_uploader(
         T["uploader_label"],
-        type="pdf",                    # o widget bloqueia outras extensões
-        accept_multiple_files=True,    # permite subir vários PDFs de uma vez
-        key=f"upload_inicial_{st.session_state.conversa_atual}",
+        type="pdf",                    # the widget blocks other extensions
+        accept_multiple_files=True,    # allows uploading several PDFs at once
+        key=f"initial_upload_{st.session_state.current_chat}",
     )
-    if arquivos_iniciais:
-        for arquivo in arquivos_iniciais:
-            # evita reprocessar o mesmo arquivo em reruns do Streamlit
-            if arquivo.name in conv["documentos"]:
+    if initial_files:
+        for file in initial_files:
+            # avoids reprocessing the same file across Streamlit reruns
+            if file.name in chat["documents"]:
                 continue
-            msg, fases = processar_pdf_upload(arquivo)
-            conv["historico"].append(
-                {"papel": "assistant", "texto": msg, "fases": fases}
+            msg, phases = process_pdf_upload(file)
+            chat["history"].append(
+                {"role": "assistant", "text": msg, "phases": phases}
             )
         st.rerun()
 
-# ---------- histórico da conversa atual ----------
-for item in conv["historico"]:
-    with st.chat_message(item["papel"]):
-        st.write(item["texto"])
-        render_fases(item.get("fases", []))
-        render_fontes(item.get("fontes", []))
+# ---------- current chat history ----------
+for item in chat["history"]:
+    with st.chat_message(item["role"]):
+        st.write(item["text"])
+        render_phases(item.get("phases", []))
+        render_sources(item.get("sources", []))
 
-# ---------- entrada do chat: texto + anexo PDF ----------
-# o campo de digitar só fica habilitado depois que um PDF foi anexado e
-# indexado na conversa — antes disso o usuário usa o uploader acima
-sem_documentos = conv["store"].vazio
-entrada = st.chat_input(
-    T["placeholder_bloqueado"] if sem_documentos else T["placeholder_chat"],
+# ---------- chat input: text + PDF attachment ----------
+# the input field is only enabled after a PDF has been attached and indexed
+# in the chat — before that the user goes through the uploader above
+no_documents = chat["store"].is_empty
+user_input = st.chat_input(
+    T["locked_placeholder"] if no_documents else T["chat_placeholder"],
     accept_file=True,
-    file_type=["pdf"],  # o próprio widget bloqueia qualquer outra extensão
-    disabled=sem_documentos,
+    file_type=["pdf"],  # the widget itself blocks any other extension
+    disabled=no_documents,
 )
 
-if entrada:
-    texto = (entrada.text or "").strip()
-    arquivos = entrada.files or []
+if user_input:
+    text = (user_input.text or "").strip()
+    files = user_input.files or []
 
-    # 1) anexos PDF enviados junto da mensagem
-    for arquivo in arquivos:
-        if not arquivo.name.lower().endswith(".pdf"):
-            # o file_type já impede, mas mantemos a checagem explícita
+    # 1) PDF attachments sent along with the message
+    for file in files:
+        if not file.name.lower().endswith(".pdf"):
+            # file_type already prevents this, but keep the explicit check
             with st.chat_message("assistant"):
-                st.warning(T["so_pdf"])
+                st.warning(T["pdf_only"])
             continue
         with st.chat_message("assistant"):
-            msg, fases = processar_pdf_upload(arquivo)
+            msg, phases = process_pdf_upload(file)
             st.write(msg)
-            render_fases(fases)
-        conv["historico"].append(
-            {"papel": "assistant", "texto": msg, "fases": fases}
+            render_phases(phases)
+        chat["history"].append(
+            {"role": "assistant", "text": msg, "phases": phases}
         )
 
-    # 2) link colado direto na mensagem
-    url_match = RE_URL.search(texto)
+    # 2) link pasted directly in the message
+    url_match = URL_RE.search(text)
     if url_match:
         url = url_match.group(0).rstrip(".,;)")
         with st.chat_message("user"):
-            st.write(texto)
-        conv["historico"].append({"papel": "user", "texto": texto})
+            st.write(text)
+        chat["history"].append({"role": "user", "text": text})
         with st.chat_message("assistant"):
             try:
-                msg, fases = processar_com_status(lambda: extrair_url(url), url)
+                msg, phases = process_with_status(lambda: extract_url(url), url)
             except Exception as e:
-                msg, fases = T["erro_link"].format(erro=e), []
+                msg, phases = T["link_error"].format(error=e), []
             st.write(msg)
-            render_fases(fases)
-        conv["historico"].append(
-            {"papel": "assistant", "texto": msg, "fases": fases}
+            render_phases(phases)
+        chat["history"].append(
+            {"role": "assistant", "text": msg, "phases": phases}
         )
-        # remove a URL do texto: o que sobrar pode ser uma pergunta
-        texto = RE_URL.sub("", texto).strip()
+        # strip the URL from the text: whatever remains may be a question
+        text = URL_RE.sub("", text).strip()
 
-    # 3) pergunta em linguagem natural
-    if texto:
-        if conv["store"].vazio:
+    # 3) natural-language question
+    if text:
+        if chat["store"].is_empty:
             with st.chat_message("assistant"):
-                st.warning(T["sem_docs"])
+                st.warning(T["no_docs"])
         else:
             with st.chat_message("user"):
-                st.write(texto)
-            conv["historico"].append({"papel": "user", "texto": texto})
+                st.write(text)
+            chat["history"].append({"role": "user", "text": text})
             with st.chat_message("assistant"):
-                # painel com as etapas 5-7 da arquitetura, em tempo real
-                with st.status(T["resp_titulo"], expanded=True) as status:
-                    st.write(T["resp_retrieval"])
-                    resultados = buscar(texto, conv["store"], top_k=5)
-                    st.write(T["resp_retrieval_ok"].format(n=len(resultados)))
+                # panel with pipeline stages 5-7, in real time
+                with st.status(T["answer_title"], expanded=True) as status:
+                    st.write(T["answer_retrieval"])
+                    results = search(text, chat["store"], top_k=5)
+                    st.write(T["answer_retrieval_ok"].format(n=len(results)))
 
-                    st.write(T["resp_prompt"])
-                    sistema, mensagem = montar_prompt(texto, resultados)
+                    st.write(T["answer_prompt"])
+                    system, message = build_prompt(text, results)
 
-                    st.write(T["resp_llm"])
-                    resposta = responder(sistema, mensagem)
-                    status.update(label=T["resp_pronta"], state="complete",
+                    st.write(T["answer_llm"])
+                    response = answer(system, message)
+                    status.update(label=T["answer_ready"], state="complete",
                                   expanded=False)
-                st.write(resposta)
-                fontes = [
+                st.write(response)
+                sources = [
                     {
-                        "documento": r.chunk.documento,
-                        "pagina": r.chunk.pagina,
-                        "secao": r.chunk.secao,
-                        "tipo": r.chunk.tipo,
+                        "document": r.chunk.document,
+                        "page": r.chunk.page,
+                        "section": r.chunk.section,
+                        "kind": r.chunk.kind,
                         "score": r.score,
                     }
-                    for r in resultados
+                    for r in results
                 ]
-                render_fontes(fontes)
-            conv["historico"].append(
-                {"papel": "assistant", "texto": resposta, "fontes": fontes}
+                render_sources(sources)
+            chat["history"].append(
+                {"role": "assistant", "text": response, "sources": sources}
             )

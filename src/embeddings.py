@@ -1,14 +1,14 @@
 """
-Módulo 3 — Embeddings: converte chunks em vetores e persiste tudo junto.
+Module 3 — Embeddings: converts chunks into vectors and persists everything
+together.
 
-Modelo: sentence-transformers `all-MiniLM-L6-v2` — local, gratuito e leve
-(384 dimensões). Para retrieval de trechos de relatório é suficiente; a
-qualidade final da resposta vem mais do chunking + prompt do que de um
-embedding maior.
+Model: sentence-transformers `all-MiniLM-L6-v2` — local, free and light
+(384 dimensions). For retrieving report passages it is enough; final answer
+quality comes more from chunking + prompt than from a bigger embedding.
 
-Persistência: um único .npz por "base" contendo a matriz de embeddings +
-os chunks serializados (JSON). Guardar vetor e texto JUNTOS evita o bug
-clássico de índice dessincronizado entre dois arquivos.
+Persistence: a single .npz per "base" holding the embeddings matrix + the
+chunks serialized as JSON. Storing vector and text TOGETHER avoids the
+classic desynchronized-index bug between two files.
 """
 
 import json
@@ -20,52 +20,52 @@ from sentence_transformers import SentenceTransformer
 from src.chunking import Chunk
 
 PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
-MODELO_NOME = "all-MiniLM-L6-v2"
+MODEL_NAME = "all-MiniLM-L6-v2"
 
-# Cache do modelo em memória: carregar o SentenceTransformer custa segundos,
-# então carregamos uma vez só por processo (importante no Streamlit, que
-# re-executa o script a cada interação).
-_modelo: SentenceTransformer | None = None
-
-
-def get_modelo() -> SentenceTransformer:
-    global _modelo
-    if _modelo is None:
-        _modelo = SentenceTransformer(MODELO_NOME)
-    return _modelo
+# In-memory model cache: loading the SentenceTransformer takes seconds, so
+# we load it once per process (important in Streamlit, which re-runs the
+# script on every interaction).
+_model: SentenceTransformer | None = None
 
 
-def gerar_embeddings(chunks: list[Chunk]) -> np.ndarray:
-    """Gera a matriz (n_chunks x 384) de embeddings normalizados.
+def get_model() -> SentenceTransformer:
+    global _model
+    if _model is None:
+        _model = SentenceTransformer(MODEL_NAME)
+    return _model
 
-    normalize_embeddings=True deixa todos os vetores com norma 1 — assim a
-    similaridade de cosseno vira um simples produto escalar no vector_store.
+
+def build_embeddings(chunks: list[Chunk]) -> np.ndarray:
+    """Builds the (n_chunks x 384) matrix of normalized embeddings.
+
+    normalize_embeddings=True gives every vector norm 1 — so cosine
+    similarity becomes a plain dot product in the vector_store.
     """
-    textos = [c.texto for c in chunks]
-    return get_modelo().encode(
-        textos,
+    texts = [c.text for c in chunks]
+    return get_model().encode(
+        texts,
         normalize_embeddings=True,
         show_progress_bar=False,
     )
 
 
-def salvar_base(nome_base: str, chunks: list[Chunk], embeddings: np.ndarray) -> Path:
-    """Salva embeddings + chunks (com metadados) em um único .npz."""
+def save_base(base_name: str, chunks: list[Chunk], embeddings: np.ndarray) -> Path:
+    """Saves embeddings + chunks (with metadata) into a single .npz."""
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    caminho = PROCESSED_DIR / f"{nome_base}.npz"
+    path = PROCESSED_DIR / f"{base_name}.npz"
     chunks_json = json.dumps([c.to_dict() for c in chunks], ensure_ascii=False)
-    np.savez_compressed(caminho, embeddings=embeddings, chunks=chunks_json)
-    return caminho
+    np.savez_compressed(path, embeddings=embeddings, chunks=chunks_json)
+    return path
 
 
-def carregar_base(caminho: str | Path) -> tuple[list[Chunk], np.ndarray]:
-    """Carrega uma base salva, reconstruindo os objetos Chunk."""
-    dados = np.load(caminho, allow_pickle=False)
-    chunks = [Chunk(**d) for d in json.loads(str(dados["chunks"]))]
-    return chunks, dados["embeddings"]
+def load_base(path: str | Path) -> tuple[list[Chunk], np.ndarray]:
+    """Loads a saved base, rebuilding the Chunk objects."""
+    data = np.load(path, allow_pickle=False)
+    chunks = [Chunk(**d) for d in json.loads(str(data["chunks"]))]
+    return chunks, data["embeddings"]
 
 
-def embed_pergunta(pergunta: str) -> np.ndarray:
-    """Embedding da pergunta do usuário — MESMO modelo e MESMA normalização
-    dos chunks, senão a comparação de similaridade não faz sentido."""
-    return get_modelo().encode([pergunta], normalize_embeddings=True)[0]
+def embed_question(question: str) -> np.ndarray:
+    """Embedding of the user's question — SAME model and SAME normalization
+    as the chunks, otherwise the similarity comparison is meaningless."""
+    return get_model().encode([question], normalize_embeddings=True)[0]
